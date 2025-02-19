@@ -1,0 +1,412 @@
+---
+title: "Assignment 3"
+author: "Gabor Zeke"
+date: "2024-10-25"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+# Introduction
+
+Monte Carlo methods offer a powerful and flexible approach to numerical integration and simulation, especially in high-dimensional or complex spaces where analytical solutions are challenging to derive. In this task, we will explore Monte Carlo integration and simulation through two problems:
+
+We will approximate the integral of an exponential function using uniformly distributed random variables for a specified finite interval and compare it to its analytical value. We will also extend this calculation to an infinite interval, considering an appropriate probability density function for the simulation. This comparison will highlight when and why Monte Carlo methods yield accurate estimates relative to classical integration techniques.
+
+In this part, we will use Monte Carlo simulation to estimate the area enclosed by a polar curve. By generating random points in a bounding rectangle and evaluating whether they fall within the enclosed region, we can approximate the area. This simulation will be performed at different levels of granularity (100 to 100,000 points), showcasing the convergence behavior of Monte Carlo estimates. We will visualize the function and estimate the enclosed area, summarizing results in a table and plots.
+
+Through these tasks, we will illustrate how Monte Carlo techniques can provide numerical solutions to complex integrals and area estimations using random sampling, along with an analysis of their accuracy and convergence behavior.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+```
+\pagebreak
+# Task 1 - Comparision of integrals with Monte Carlo simulation and native R
+
+### 1.1 Use uniformly distributed random variables to approximate the integral for b = 6 (using Monte Carlo integration). Then use the function integrate for comparison.
+
+In this task, we will approximate the value of the following integral:
+$$
+\int_{0}^{6} e^{-x^3} dx
+$$
+using Monte Carlo integration with uniformly distributed random variables. This method involves randomly sampling points within the interval [0,6] and using their average to estimate the integral. Additionally, we will calculate the exact value of the integral using a standard numerical integration function for comparison. This exercise will illustrate the effectiveness and limitations of Monte Carlo integration in estimating definite integrals over finite intervals.
+
+``` {r task1.1}
+integrand <- function(x) {
+  tryCatch({
+    exp(-x^3)
+  }, error = function(e) {
+    stop("Error in integrand function: ", e$message)
+  })
+}
+
+monte_carlo_integration <- function(n_samples, b) {
+  if (!is.numeric(n_samples) || n_samples <= 0) {
+    stop("Error: n_samples must be a positive integer.")
+  }
+  if (!is.numeric(b) || b <= 0) {
+    stop("Error: b must be a positive number.")
+  }
+
+  tryCatch({
+    estimate <- b * mean(integrand(runif(n_samples, 0, b)))
+    return(estimate)
+  }, error = function(e) {
+    stop("Error in Monte Carlo integration: ", e$message)
+  })
+}
+
+n_samples <- 10000
+b <- 6
+
+monte_carlo_result <- tryCatch({
+  monte_carlo_integration(n_samples, b)
+}, error = function(e) {
+  stop("Error calculating Monte Carlo result: ", e$message)
+})
+
+exact_value <- tryCatch({
+  integrate(integrand, 0, b)$value
+}, error = function(e) {
+  stop("Error calculating exact value: ", e$message)
+})
+
+cat("Monte Carlo Estimate for b=6:", monte_carlo_result, "\n")
+cat("Exact Value for b=6:", exact_value, "\n")
+```
+
+The Monte Carlo estimate for the integral is approximately 0.902, while the exact value obtained through numerical integration is approximately 0.893. The small difference between the two values reflects the inherent randomness and approximation error in the Monte Carlo method, but overall, the estimate is reasonably close to the exact result, demonstrating that the method is effective for this integral.
+
+\pagebreak
+### 1.2 Use Monte Carlo integration to compute the integral for b = ∞. What would be a good density for the simulation in that case? Use also the function integrate for comparison.
+
+In this task, we extend our previous Monte Carlo integration approach to approximate the value of the integral 
+
+$$
+\int_{0}^{6} e^{-x^3} dx.
+$$
+
+Since the integration interval is infinite, using a uniform distribution is inefficient. Instead, we will select an appropriate probability density function (PDF) to better simulate the behavior of the integrand and achieve accurate results. Additionally, we will compare our Monte Carlo estimate with the exact value obtained using a numerical integration function to evaluate the accuracy of our approach for integrals over infinite domains.
+
+``` {r task1.2}
+integrand <- function(x) {
+  tryCatch({
+    exp(-x^3)
+  }, error = function(e) {
+    stop("Error in integrand function: ", e$message)
+  })
+}
+
+monte_carlo_integration_inf <- function(n_samples) {
+  if (!is.numeric(n_samples) || n_samples <= 0) {
+    stop("Error: n_samples must be a positive integer.")
+  }
+  
+  samples <- tryCatch({
+    rexp(n_samples, 1)
+  }, error = function(e) {
+    stop("Error generating samples: ", e$message)
+  })
+  
+  tryCatch({
+    mean(integrand(samples) * exp(samples))
+  }, error = function(e) {
+    stop("Error in Monte Carlo integration: ", e$message)
+  })
+}
+
+n_samples <- 10000
+
+monte_carlo_result <- tryCatch({
+  monte_carlo_integration_inf(n_samples)
+}, error = function(e) {
+  stop("Error calculating Monte Carlo result: ", e$message)
+})
+
+exact_value <- tryCatch({
+  integrate(integrand, 0, Inf)$value
+}, error = function(e) {
+  stop("Error calculating exact value: ", e$message)
+})
+
+cat("Monte Carlo Estimate for b=Inf:", monte_carlo_result, "\n")
+cat("Exact Value for b=Inf:", exact_value, "\n")
+```
+The Monte Carlo estimate for the integral over b=∞ is approximately 0.893, and the exact value calculated using numerical integration is 0.893 as well. The two values are very close, indicating that the Monte Carlo integration method worked effectively for this problem.
+
+In this approach, using an exponential distribution with a rate parameter of 1 as the sampling density was a good choice because it decays at a similar rate as the integrand. This helps to ensure efficient sampling without an excessive number of outlier values, contributing to a low-variance estimate that converges to the correct value quickly. The close match between the Monte Carlo estimate and the exact value demonstrates the validity of using this density for importance sampling in this context.
+
+### 1.3 Do you have an explanation why Monte Carlo integration agrees in 2. with integrate but not so much in 1.?
+
+The better agreement for b=∞ occurs because Monte Carlo integration used an exponential distribution that closely matches the decay of the integrand, leading to more efficient sampling and lower variance. In contrast, for b=6, using a uniform distribution resulted in less efficient sampling, with higher variance, since many samples fall in regions where the integrand contributes less, reducing precision.
+
+\pagebreak
+# Task 2 - Area estimation with Monte Carlo Simulation
+
+In this task, we will utilize Monte Carlo simulation to estimate the area enclosed by a curve defined in polar coordinates. The curve is given by the function:
+
+$$
+r(t) = \exp(\cos(t)) - 2 \cdot \cos(4 \cdot t) - \sin\left(\frac{t}{12}\right)^5, \quad t \in [-\pi, \pi]
+$$
+
+We will use polar to Cartesian conversion to translate the polar coordinates 
+$$
+x = r(t) \cdot \cos(t)
+$$
+
+$$
+y = r(t) \cdot \sin(t)
+$$
+
+### 2.1 Visualise the function and the area
+
+In this task, we will explore the area enclosed by a polar curve and estimate its area using Monte Carlo simulation.The objective is to visualize the area enclosed by the curve in the Cartesian plane, and use Monte Carlo simulation to estimate the area within the curve.
+``` {r task2.1}
+r_function <- function(t) {
+  tryCatch({
+    exp(cos(t)) - 2 * cos(4 * t) - sin(t / 12)^5
+  }, error = function(e) {
+    stop("Error in r_function: ", e$message)
+  })
+}
+
+polar_to_cartesian <- function(t) {
+  tryCatch({
+    r <- r_function(t)
+    c(r * cos(t), r * sin(t))
+  }, error = function(e) {
+    stop("Error in polar_to_cartesian: ", e$message)
+  })
+}
+
+monte_carlo_area <- function(n_samples) {
+  if (!is.numeric(n_samples) || n_samples <= 0) {
+    stop("Error: n_samples must be a positive integer.")
+  }
+
+  t_samples <- tryCatch({
+    runif(n_samples, -pi, pi)
+  }, error = function(e) {
+    stop("Error generating t_samples: ", e$message)
+  })
+  
+  points <- tryCatch({
+    t(sapply(t_samples, polar_to_cartesian))
+  }, error = function(e) {
+    stop("Error in converting polar to Cartesian: ", e$message)
+  })
+  
+  x_min <- min(points[, 1])
+  x_max <- max(points[, 1])
+  y_min <- min(points[, 2])
+  y_max <- max(points[, 2])
+
+  random_points <- tryCatch({
+    cbind(runif(n_samples, x_min, x_max), runif(n_samples, y_min, y_max))
+  }, error = function(e) {
+    stop("Error generating random_points: ", e$message)
+  })
+
+  inside_area <- tryCatch({
+    sum(apply(random_points, 1, function(p) {
+      sqrt(p[1]^2 + p[2]^2) <= max(sapply(t_samples, r_function))
+    }))
+  }, error = function(e) {
+    stop("Error calculating inside_area: ", e$message)
+  })
+  
+  area_estimate <- (inside_area / n_samples) * (x_max - x_min) * (y_max - y_min)
+  return(area_estimate)
+}
+
+t_vals <- seq(-pi, pi, length.out = 1000)
+polar_coords <- tryCatch({
+  t(sapply(t_vals, polar_to_cartesian))
+}, error = function(e) {
+  stop("Error in converting polar to Cartesian: ", e$message)
+})
+
+x_vals <- polar_coords[, 1]
+y_vals <- polar_coords[, 2]
+
+ggplot() +
+  geom_path(aes(x = x_vals, y = y_vals), color = "blue", size = 1) +
+  coord_fixed() +
+  theme_minimal() +
+  labs(title = "Polar Curve and Enclosed Area", x = "X", y = "Y")
+
+n_samples <- 100
+estimated_area <- tryCatch({
+  monte_carlo_area(n_samples)
+}, error = function(e) {
+  stop("Error estimating area: ", e$message)
+})
+
+cat("Estimated Area Enclosed by the Curve:", estimated_area, "\n")
+```
+\pagebreak
+### 2.2 Generate uniform random coordinates within the rectangle [−2,3.5]×[−3,3] and an indicator whether this point lies within the area in question.
+
+In this task, we will use Monte Carlo simulation to estimate the area enclosed by a polar curve. To do so, we first generate uniform random coordinates within a defined rectangular region [−2,3.5]×[−3,3], which acts as our bounding box. For each random point generated, we will determine whether it lies inside the area enclosed by the curve. This is done by comparing the point's distance from the origin to the value of the function r(t) that defines the boundary of the area. By calculating the proportion of points that lie inside the area, we can estimate the area enclosed by the curve.
+``` {r task2.2}
+generate_random_points <- function(n_samples) {
+  if (!is.numeric(n_samples) || n_samples <= 0) {
+    stop("Error: n_samples must be a positive integer.")
+  }
+  
+  x_random <- tryCatch({
+    runif(n_samples, -2, 3.5)
+  }, error = function(e) {
+    stop("Error generating x_random: ", e$message)
+  })
+  
+  y_random <- tryCatch({
+    runif(n_samples, -3, 3)
+  }, error = function(e) {
+    stop("Error generating y_random: ", e$message)
+  })
+  
+  inside_area <- tryCatch({
+    as.integer(sapply(1:n_samples, function(i) {
+      distance_from_origin <- sqrt(x_random[i]^2 + y_random[i]^2)
+      distance_from_origin <= r_function(atan2(y_random[i], x_random[i]))
+    }))
+  }, error = function(e) {
+    stop("Error calculating inside_area: ", e$message)
+  })
+  
+  if (length(inside_area) != n_samples) {
+    stop("Error: The number of inside_area values does not match n_samples.")
+  }
+  
+  data.frame(x = x_random, y = y_random, inside = inside_area)
+}
+
+n_samples <- 1000
+random_points <- tryCatch({
+  generate_random_points(n_samples)
+}, error = function(e) {
+  stop("Error generating random points: ", e$message)
+})
+
+t_vals <- seq(-pi, pi, length.out = 1000)
+polar_coords <- tryCatch({
+  t(sapply(t_vals, polar_to_cartesian))
+}, error = function(e) {
+  stop("Error in converting polar to Cartesian coordinates: ", e$message)
+})
+
+x_vals <- polar_coords[, 1]
+y_vals <- polar_coords[, 2]
+
+ggplot() +
+  geom_path(aes(x = x_vals, y = y_vals), color = "blue", size = 1) +
+  geom_point(data = random_points, aes(x = x, y = y, color = factor(inside)), size = 0.5) +
+  scale_color_manual(values = c("red", "green"), labels = c("Outside", "Inside")) +
+  coord_fixed() +
+  theme_minimal() +
+  labs(title = "Random Points Inside/Outside the Enclosed Area",
+       x = "X", y = "Y", color = "Point Status") +
+  theme(legend.position = "bottom")
+```
+
+\pagebreak
+
+### 2.3 Simulate 100, 1000, 10000 and 100000 random coordiantes and calculate the percentage of the points within the enclosed area. Based on this information estimate the area of the figure. Summarise those values in a table and visualise them in plots of the function curve and enclosed area.
+
+In this task, we will extend our previous Monte Carlo simulation by generating different numbers of random coordinates (100, 1000, 10000, and 100000) within the bounding rectangle [−2,3.5]×[−3,3]. For each set of random points, we will calculate the percentage of points that lie within the area enclosed by the polar curve. This percentage will then be used to estimate the total area enclosed by the curve. By varying the number of random points, we can observe how the estimate improves as the sample size increases. Finally, we will summarize the estimated area for each sample size in a table and visualize the results, including the curve and the points inside and outside the area.
+
+```{r task2.3}
+estimate_area <- function(n_samples) {
+  if (!is.numeric(n_samples) || n_samples <= 0) {
+    stop("Error: n_samples must be a positive integer.")
+  }
+  
+  random_points <- tryCatch({
+    generate_random_points(n_samples)
+  }, error = function(e) {
+    stop("Error generating random points: ", e$message)
+  })
+  
+  if (nrow(random_points) == 0) {
+    stop("Error: No random points were generated.")
+  }
+  
+  if (!all(random_points$inside %in% c(0, 1))) {
+    stop("Error: 'inside' column in random points must contain 0s or 1s.")
+  }
+  
+  inside_percentage <- mean(random_points$inside) * 100
+  
+  bounding_box_area <- (3.5 + 2) * (3 + 3)
+  if (bounding_box_area <= 0) {
+    stop("Error: Calculated bounding box area is non-positive.")
+  }
+  
+  estimated_area <- mean(random_points$inside) * bounding_box_area
+  
+  return(list(inside_percentage = inside_percentage, estimated_area = estimated_area))
+}
+
+sample_sizes <- c(100, 1000, 10000, 100000)
+results <- data.frame(Sample_Size = sample_sizes, 
+                      Inside_Percentage = numeric(4), 
+                      Estimated_Area = numeric(4))
+
+results[ , 2:3] <- lapply(sample_sizes, function(n) {
+  tryCatch({
+    area_results <- estimate_area(n)
+    return(c(area_results$inside_percentage, area_results$estimated_area))
+  }, error = function(e) {
+    cat("Error while estimating area for sample size", n, ": ", e$message, "\n")
+    return(c(NA, NA))  
+  })
+})
+
+if (any(is.na(results$Estimated_Area))) {
+  warning("Some area estimates are missing due to errors during estimation.")
+}
+
+t_vals <- seq(-pi, pi, length.out = 1000)
+polar_coords <- tryCatch({
+  t(sapply(t_vals, polar_to_cartesian))
+}, error = function(e) {
+  stop("Error in converting polar to Cartesian coordinates: ", e$message)
+})
+
+x_vals <- polar_coords[, 1]
+y_vals <- polar_coords[, 2]
+
+random_points_large <- tryCatch({
+  generate_random_points(100000)
+}, error = function(e) {
+  stop("Error generating random points for large sample size: ", e$message)
+})
+
+ggplot() +
+  geom_path(aes(x = x_vals, y = y_vals), color = "blue", size = 1) +
+  geom_point(data = random_points_large, aes(x = x, y = y, color = factor(inside)), size = 0.5) +
+  scale_color_manual(values = c("red", "green"), labels = c("Outside", "Inside")) +
+  coord_fixed() +
+  theme_minimal() +
+  labs(title = "Random Points Inside/Outside the Enclosed Area",
+       x = "X", y = "Y", color = "Point Status") +
+  theme(legend.position = "bottom")
+
+ggplot(results, aes(x = Sample_Size, y = Estimated_Area)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  scale_x_log10() +
+  labs(title = "Estimated Area vs Sample Size",
+       x = "Sample Size (log scale)", y = "Estimated Area") +
+  theme_minimal()
+```
+
+### 2.4 Explain the functionality of Monte Carlo simulation in your own words referring to these simulations.
+
+Monte Carlo simulation is a technique used to approximate complex problems through random sampling. In the context of the tasks above, it was employed to estimate the area enclosed by a curve or any irregular shape. The process begins by generating random points within a bounding box that contains the curve. For each randomly chosen point, we calculate its position relative to the curve. Specifically, for each point, we determine if its distance from the origin is less than or equal to the value of the radius function r(θ) at the corresponding angle θ.
+
+Once a large number of random points have been generated, we calculate the percentage of points that fall inside the curve. This percentage is then multiplied by the area of the bounding box to estimate the area enclosed by the curve. The accuracy of this estimate improves as more points are sampled, as the randomness of the results diminishes with larger sample sizes, bringing the estimate closer to the true value.
+
+Monte Carlo simulations are particularly useful in situations where exact analytical solutions are difficult or impossible to compute. By comparing the Monte Carlo estimates with exact values from numerical integration methods, like the integrate function, we can assess the reliability of the Monte Carlo approach. In these simulations, Monte Carlo integration effectively estimates the area under the curve defined in polar coordinates, and as the number of random samples increases, the estimate becomes more accurate.

@@ -1,0 +1,1 @@
+"0","lines(economics$uempmed, predict(log_model), col = ""red"", lwd = 2)"

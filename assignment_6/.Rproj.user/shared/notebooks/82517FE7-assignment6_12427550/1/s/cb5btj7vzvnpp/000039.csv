@@ -1,0 +1,1 @@
+"0","plot(economics$uempmed, economics$unemploy, main = ""Unemployed vs Median Days Unemployed"", xlab = ""Median Days Unemployed"", ylab = ""Number of Unemployed"", pch = 16)"

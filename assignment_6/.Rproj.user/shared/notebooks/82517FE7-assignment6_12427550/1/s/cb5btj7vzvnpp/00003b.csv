@@ -1,0 +1,1 @@
+"0","lines(economics$uempmed, predict(linear_model), col = ""blue"", lwd = 2)"

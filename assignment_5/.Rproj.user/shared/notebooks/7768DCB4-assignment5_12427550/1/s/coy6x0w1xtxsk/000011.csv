@@ -1,0 +1,3 @@
+"0",""
+"0","hist(x1, col = rgb(1, 0, 0, 0.5), breaks = 10, xlim = range(c(x1, x2)), xlab = ""Values"","
+"0","     main = ""Histogram Comparison"", probability = TRUE)"

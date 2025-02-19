@@ -1,0 +1,4 @@
+"0",""
+"0","# Grafische Darstellung"
+"0","par(mfrow = c(2, 1))"
+"0","hist(bootstrap_mean_x$t, main = ""Nicht-parametrischer Bootstrap für den Mittelwert (x)"", xlab = ""Mittelwert"", col = ""skyblue"")"

@@ -1,0 +1,1 @@
+"0","hist(bootstrap_means, breaks = 30, main = ""Verteilung der Bootstrap-Mittelwerte"", xlab = ""Mittelwerte"", col = ""skyblue"")"

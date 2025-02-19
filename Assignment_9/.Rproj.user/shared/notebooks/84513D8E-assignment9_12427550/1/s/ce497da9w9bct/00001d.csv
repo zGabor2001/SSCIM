@@ -1,0 +1,1 @@
+"0","plot(mcmc_chain2[, 1], type = ""l"", main = expression(""Chain 2: "" ~ theta[1]), ylab = ""Value"", xlab = ""Iteration"")"

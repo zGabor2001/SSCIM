@@ -1,0 +1,307 @@
+---
+title: "Assignment 8"
+author: "Gabor Zeke"
+date: "2025-01-04"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(coda)
+library(ggplot2)
+library(MASS)
+library(rstanarm)
+library(ISLR)
+```
+
+# Introduction
+
+The tasks at hand explore two key statistical methodologies: Bayesian inference in the context of a Binomial distribution and Bayesian linear regression. Task 1 revisits the estimation of Covid-19 prevalence during the early stages of the pandemic in Austria. Leveraging Bayesian principles, the task constructs a prior distribution informed by German data, derives the posterior distribution for the proportion of infected individuals, and interprets the results. This approach highlights the advantages of Bayesian methods in situations where data are scarce or standard frequentist methods fail. Task 2 delves into Bayesian linear regression, focusing on the inference of model parameters under conjugate priors. Using the well-known Auto dataset, we compare the Bayesian results to their frequentist counterparts for a simple linear model relating fuel efficiency (mpg) to engine horsepower. Together, these tasks demonstrate the power and flexibility of Bayesian methods in addressing complex statistical problems, offering insight into why they are chosen over traditional approaches in specific contexts.
+
+\pagebreak
+
+# Task 1
+
+In the early stages of the Covid-19 pandemic, estimating the prevalence of the disease posed significant challenges due to limited data and low infection rates. Task 1 focuses on recalculating the prevalence of Covid-19 in Austria during spring 2020 using a Bayesian approach. With no positive cases detected in a sample of 1279 individuals, traditional frequentist methods fail to provide meaningful estimates. To address this, we incorporate prior information from a similar German study, where 4 positive cases were identified out of 4068 tests. By constructing a Beta prior distribution informed by the German data, and updating it with the Austrian data through Bayesian inference, we derive a posterior distribution for the prevalence. This task explores the calculation of point estimates, the 95% Highest Posterior Density (HPD) interval, and the rationale behind using Bayesian inference over frequentist or simulation-based methods in such scenarios.
+
+### 1.1 Build a Beta prior distribution for this Binomial scenario, which encodes the information of the German study. Reweight both parameters compared to the original counts with a factor of 1/10.
+
+This task focuses on constructing a Bayesian prior distribution for estimating Covid-19 prevalence in Austria during spring 2020. Using data from a German study with 4 positive cases out of 4068 tests, a Beta prior is built to encode this information. To reflect the relative importance of this prior, both parameters of the Beta distribution are scaled by a factor of 110. This prior will serve as the foundation for further Bayesian analysis of the Austrian data.
+
+``` {r}
+german_positive <- 4
+german_total <- 4068
+
+alpha_prior <- german_positive * (1/10)
+beta_prior <- (german_total - german_positive) * (1/10)
+
+alpha_prior
+beta_prior
+```
+The code constructs a Beta prior distribution to model the Covid-19 prevalence in Austria based on a German study with 4 positive cases out of 4068 tests. The prior is adjusted by scaling both parameters α and β by a factor of 1/10. The resulting parameters are α=0.4 and β=406.4, which encode the information of 4 positives and 4064 negatives with reduced weight. This Beta prior will serve as the starting point for Bayesian analysis of the Austrian data.
+
+\pagebreak
+
+### 1.2 Build the corresponding Binomial model for the number of people suffering from the disease based on the 1279 test. Obtain the theoretical posterior distribution for this scenario.
+
+In this part of the task, we extend the Bayesian analysis by building a Binomial model to estimate the number of people suffering from Covid-19 in Austria based on a sample of 1279 individuals, where no positive cases were detected. Using the Beta prior distribution established from the German study, we apply Bayes' theorem to derive the posterior distribution for the proportion of infected individuals in the Austrian population. This allows us to update our beliefs about the prevalence of the disease, taking into account both the prior knowledge from Germany and the observed data from Austria.
+
+``` {r}
+austrian_positive <- 0
+austrian_total <- 1279
+
+alpha_posterior <- alpha_prior + austrian_positive
+beta_posterior <- beta_prior + (austrian_total - austrian_positive)
+
+alpha_posterior
+beta_posterior
+```
+
+The code updates the Beta prior distribution using the observed data from Austria, where no positive cases were detected out of 1279 tests. The prior parameters α=0.4 and β=406.4 are updated to αposterior=0.4 and βposterior=1685.4, reflecting the new information. This updated Beta distribution represents the posterior belief about the Covid-19 prevalence in Austria, combining the prior knowledge from Germany with the Austrian data, which suggests that the proportion of infected individuals is still likely to be very low, with most of the probability mass concentrated on low infection rates.
+
+\pagebreak
+
+### 1.3 Plot the posterior density and obtain the point estimators and 95% Highest posterior density interval of the prevalence of Covid19 (=proportion of inhabitants suffering from the disease).
+
+In this step, we analyze the posterior distribution derived in the previous part by plotting its density to visualize the updated belief about the Covid-19 prevalence in Austria. From this posterior, we will calculate point estimators, such as the mean or mode, and determine the 95% Highest Posterior Density (HPD) interval, which provides a credible range for the proportion of the population suffering from the disease. This allows us to quantify the uncertainty in the prevalence estimate while incorporating prior knowledge and the observed data.
+
+``` {r}
+check_beta_parameters <- function(alpha, beta) {
+  if (alpha <= 0 || beta <= 0) {
+    stop("Both 'alpha_posterior' and 'beta_posterior' must be greater than zero.")
+  }
+}
+
+posterior_density <- function(p, alpha_posterior, beta_posterior) {
+  check_beta_parameters(alpha_posterior, beta_posterior)
+  tryCatch({
+    dbeta(p, alpha_posterior, beta_posterior)
+  }, error = function(e) {
+    cat("Error in calculating posterior density: ", e$message, "\n")
+    return(rep(NA, length(p)))
+  })
+}
+
+tryCatch({
+  p <- seq(0, 0.01, length.out = 1000)
+  posterior_values <- posterior_density(p, alpha_posterior, beta_posterior)
+  
+  if (any(is.na(posterior_values))) {
+    stop("Posterior density calculation resulted in NA values.")
+  }
+
+  ggplot(data = data.frame(p, posterior_values), aes(x = p, y = posterior_values)) +
+    geom_line(color = "blue") +
+    labs(title = "Posterior Density of Covid19 Prevalence",
+         x = "Prevalence (proportion)",
+         y = "Density") +
+    theme_minimal()
+}, error = function(e) {
+  cat("Error in generating plot: ", e$message, "\n")
+})
+```
+
+
+The resulting plot shows the posterior density of Covid-19 prevalence based on the Beta distribution derived from the Austrian data. The shape of the plot displays that the posterior distribution is heavily concentrated near zero, indicating that the most likely proportion of infected individuals is very low, as expected with no positive cases observed in the 1279 tests. This suggests a strong belief that the prevalence in Austria is very close to zero, given the prior and the observed data.
+
+``` {r}
+check_beta_parameters <- function(alpha, beta) {
+  if (alpha <= 0 || beta <= 0) {
+    stop("Both 'alpha_posterior' and 'beta_posterior' must be greater than zero.")
+  }
+}
+
+calculate_posterior_statistics <- function(alpha_posterior, beta_posterior) {
+  check_beta_parameters(alpha_posterior, beta_posterior)
+  
+  tryCatch({
+    mean_prevalence <- alpha_posterior / (alpha_posterior + beta_posterior)
+
+    mode_prevalence <- ifelse(alpha_posterior > 1, 
+                               (alpha_posterior - 1) / (alpha_posterior + beta_posterior - 2),
+                               NA)
+
+    hpd_samples <- rbeta(100000, alpha_posterior, beta_posterior)
+    hpd_interval <- HPDinterval(as.mcmc(hpd_samples), prob = 0.95)
+
+    list(mean = mean_prevalence, mode = mode_prevalence, hpd = hpd_interval)
+    
+  }, error = function(e) {
+    cat("Error in calculating posterior statistics: ", e$message, "\n")
+    return(NULL)
+  })
+}
+
+posterior_results <- calculate_posterior_statistics(alpha_posterior, beta_posterior)
+
+if (!is.null(posterior_results)) {
+  posterior_results$mean
+  posterior_results$mode
+  posterior_results$hpd
+} else {
+  cat("Posterior statistics could not be computed due to an error.\n")
+}
+```
+
+The analysis of the posterior distribution of Covid-19 prevalence in Austria reveals that the expected proportion of infected individuals is very low. The mean prevalence is approximately 0.00024, indicating a very small proportion of the population suffering from the disease. However, the mode of the distribution is negative, which is not meaningful for a proportion and suggests that the mode may not be well-defined due to the distribution's shape. The 95% Highest Posterior Density (HPD) interval ranges from nearly zero to 0.00099, suggesting that there is a 95% probability that the true prevalence is very close to zero. Overall, the results strongly support the conclusion that the Covid-19 prevalence in Austria during spring 2020 was very low based on the data and prior information.
+
+\pagebreak
+
+### 1.4 Explain why Statistik Austria chose this method instead of simulationbased or frequentist inference for obtaining intervals of the prevalence.
+
+Statistik Austria likely chose a Bayesian approach for several compelling reasons. First, it allows the integration of prior knowledge, such as data from Germany, to improve the accuracy of prevalence estimates when local data is limited or scarce. Second, Bayesian methods effectively handle cases with zero positive results, a scenario where frequentist approaches often fail by yielding undefined or unreliable interval estimates. Third, Bayesian credible intervals, such as the highest posterior density intervals, provide a more intuitive interpretation by identifying the range of values with the highest probability given the data. Finally, Bayesian inference proves robust in situations involving small sample sizes or rare events, which was particularly critical during the early stages of the pandemic when information was scarce.
+
+\pagebreak
+
+# Task 2
+
+Task 2 delves into Bayesian inference within the context of linear regression, specifically focusing on the estimation of the model's coefficient (β) and the residual variance (σ2). In Bayesian linear modeling, we assume that the residuals follow a normal distribution, and we use conjugate priors for both parameters to facilitate analytical tractability. The task involves defining these priors, exploring how to set them to be uninformative, and comparing the effects of different prior choices. By building the normal regression model, we derive the posterior distributions for β and σ2, and calculate the corresponding point estimators and 95% Highest Posterior Density (HPD) intervals. We then apply this methodology to the Auto dataset from Exercise 6, comparing the results with those obtained from frequentist methods. This task highlights the advantages of Bayesian inference in incorporating prior knowledge and updating beliefs based on observed data.
+
+### 2.1 Define conjugate priors for the coefficient parameter and the residual variance independently. Explain how the parameters can be set to be uninformative. Compare different choice of prior parameters.
+
+In this step, we define conjugate priors for the parameters of a Bayesian linear regression model: the regression coefficient (β) and the residual variance (σ2). Conjugate priors are chosen because they simplify the calculation of the posterior distribution by ensuring that the prior and likelihood belong to the same family of distributions. For β, a normal prior is typically used, while for σ2, an inverse Gamma prior is common. We also explore how these priors can be set to be uninformative, meaning they reflect minimal prior knowledge and allow the data to predominantly influence the posterior. Finally, we compare the effects of different prior choices on the regression results, providing insight into how prior specifications can impact Bayesian inference.
+
+``` {r}
+mu_prior <- 0
+tau2_prior <- 1e6
+
+alpha_prior <- 0.001
+beta_prior <- 0.001
+```
+
+### 2.2 Build the corresponding normal model the regression inference. Obtain the theoretical posterior distribution for both parameters separately assuming the other one to be "known".
+
+In this part of the task, we build the Bayesian normal regression model for inference on the linear relationship between the dependent variable and the explanatory variable. By assuming normal distributions for both the regression coefficient (β) and the residual variance (σ2), we can derive the theoretical posterior distributions for these parameters. The derivation involves updating our prior beliefs based on the observed data, while treating one parameter as fixed to obtain the posterior for the other. This approach allows us to compute the posterior distribution for β assuming σ2 is known, and vice versa, facilitating a deeper understanding of the relationship between these parameters in the regression context.
+
+``` {r}
+check_input_data <- function(Auto, tau2_prior, alpha_prior, beta_prior) {
+  if (is.null(Auto) || nrow(Auto) == 0) {
+    stop("The dataset 'Auto' is either null or empty.")
+  }
+  if (tau2_prior <= 0) {
+    stop("Prior value 'tau2_prior' must be positive.")
+  }
+  if (alpha_prior <= 0 || beta_prior <= 0) {
+    stop("Both 'alpha_prior' and 'beta_prior' must be positive.")
+  }
+}
+
+perform_bayesian_regression <- function(Auto, tau2_prior, alpha_prior, beta_prior) {
+  check_input_data(Auto, tau2_prior, alpha_prior, beta_prior)
+  
+  tryCatch({
+    X <- cbind(1, Auto$horsepower)
+    y <- Auto$mpg
+    n <- length(y)
+    p <- ncol(X)
+
+    if (n != nrow(X)) {
+      stop("The number of rows in X must match the length of y.")
+    }
+
+    sigma2_known <- 1
+    
+    V_post <- solve(t(X) %*% X / sigma2_known + diag(1 / tau2_prior, p))
+    mu_post <- V_post %*% (t(X) %*% y / sigma2_known)
+
+    residuals <- y - X %*% solve(t(X) %*% X) %*% t(X) %*% y
+    alpha_post <- alpha_prior + n / 2
+    beta_post <- beta_prior + sum(residuals^2) / 2
+
+    list(V_post = V_post, 
+         mu_post = mu_post, 
+         alpha_post = alpha_post, 
+         beta_post = beta_post,
+         X = X,
+         y = y,
+         n = n,
+         p = p)
+
+  }, error = function(e) {
+    cat("Error in Bayesian regression computation: ", e$message, "\n")
+    return(NULL)
+  })
+}
+
+tau2_prior <- 1e6
+alpha_prior <- 0.001
+beta_prior <- 0.001
+
+bayesian_results <- perform_bayesian_regression(Auto, tau2_prior, alpha_prior, beta_prior)
+
+if (!is.null(bayesian_results)) {
+  bayesian_results$V_post
+  bayesian_results$mu_post
+  bayesian_results$alpha_post
+  bayesian_results$beta_post
+} else {
+  cat("Bayesian regression could not be computed due to an error.\n")
+}
+
+V_post <- bayesian_results$V_post
+mu_post <- bayesian_results$mu_post
+alpha_post <- bayesian_results$alpha_post
+beta_post <- bayesian_results$beta_post
+X <- bayesian_results$X
+y <- bayesian_results$y
+n <- bayesian_results$n
+p <- bayesian_results$p
+
+```
+
+### 2.3 Provide the formulae for point estimators and 95% Highest posterior density interval of the regression parameters separately assuming the other one to be "known".
+
+In this task, we focus on calculating the point estimators and 95% Highest Posterior Density (HPD) intervals for the regression parameters β and σ2 in a Bayesian linear regression model. Using the posterior distributions derived in the previous step, we will obtain point estimates (such as the mean or mode) for each parameter and compute the 95% HPD intervals, which provide credible ranges for the parameter values. These calculations are performed separately by assuming the other parameter is known, offering insights into the individual uncertainty and distribution of each parameter in the model. This step demonstrates how Bayesian inference provides both estimates and uncertainty quantification in regression analysis.
+
+``` {r}
+beta_posterior_mean <- mu_post
+beta_posterior_variance <- V_post
+
+sigma2_posterior_alpha <- alpha_post
+sigma2_posterior_beta <- beta_post
+```
+
+``` {r}
+beta_MLE <- solve(t(X) %*% X) %*% t(X) %*% y
+
+beta_95_HPD <- apply(V_post, 2, function(var) {
+  mean <- mu_post
+  hpd_lower <- qnorm(0.025, mean, sqrt(var))
+  hpd_upper <- qnorm(0.975, mean, sqrt(var))
+  c(hpd_lower, hpd_upper)
+})
+
+sigma2_MAP <- beta_post / (alpha_post + 1)
+
+sigma2_95_HPD <- c(
+  qgamma(0.025, alpha_post, rate = 1 / beta_post),
+  qgamma(0.975, alpha_post, rate = 1 / beta_post)
+)
+```
+
+\pagebreak
+
+### 2.4 Test this with the data from your exercise 6: dataset Auto and model: mpg ~ horsepower
+
+In this step, we apply the Bayesian linear regression model to real data from Exercise 6, using the Auto dataset. Specifically, we model the relationship between miles per gallon (mpg) and horsepower, with the regression equation mpg∼horsepower. By performing Bayesian inference on this dataset, we will calculate the posterior distributions for the regression coefficient and residual variance, along with their point estimates and 95% Highest Posterior Density intervals. This practical application allows us to compare the results obtained from Bayesian methods with those from traditional frequentist regression, highlighting the differences and strengths of each approach.
+
+``` {r}
+fit <- stan_glm(
+  mpg ~ horsepower, 
+  data = Auto, 
+  prior = normal(0, sqrt(1e6)),
+  prior_aux = exponential(1),
+  chains = 4,
+  iter = 2000
+)
+
+summary(fit)
+```
+
+The model results provide estimates for the relationship between horsepower and miles per gallon (mpg) in a linear regression. The estimated intercept is 23.2 with a standard deviation of 9.9, suggesting that when horsepower is zero, the expected mpg is around 23.2, with a credible range between 18.1 and 40.1. The coefficient for horsepower is estimated to be -0.2, indicating a negative relationship between horsepower and mpg, meaning that as horsepower increases, mpg tends to decrease. The standard deviation for this coefficient is very small, reflecting a precise estimate. The model also reports warnings about issues with convergence, including a high R-hat value for some parameters, suggesting that the chains may not have mixed well and that further iterations or adjustments to the model may be needed. Additionally, the effective sample sizes for some parameters are low, indicating that the estimates may be unreliable, especially for the intercept and sigma (the standard deviation of residuals), suggesting that the model may not have fully converged and requires more iterations for better accuracy.
+
+### Compare the Bayesian against the frequentist results.
+
+In comparing the Bayesian and frequentist results for the regression of mpg on horsepower, the Bayesian method provides a full posterior distribution for the coefficients and residual variance, including credible intervals. For instance, the Bayesian estimate for the horsepower coefficient is -0.2, with a small standard deviation, suggesting a precise negative relationship between horsepower and mpg. In contrast, frequentist regression gives a point estimate for the coefficient and standard errors, offering only confidence intervals. While both methods yield similar point estimates for the coefficient, the Bayesian approach provides more flexibility in quantifying uncertainty through posterior distributions, which may be particularly useful when considering prior information or dealing with small or uncertain data.

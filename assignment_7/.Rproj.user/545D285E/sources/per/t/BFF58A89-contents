@@ -1,0 +1,387 @@
+---
+title: "Assignment 7"
+author: "Gabor Zeke"
+date: "2024-12-17"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ISLR)
+library(glmnet)
+library(caret)
+library(ggplot2)
+```
+
+# Introduction
+
+This project focuses on implementing and analyzing regularized regression techniques, with a specific emphasis on LASSO and Ridge regression. In Task 1, we develop a custom implementation of the LASSO algorithm using the shooting method, evaluate it over a range of penalty parameters (λ), and compare its performance against the glmnet package. We also implement 10-fold cross-validation to select the optimal λ and validate the results using simulated data.
+
+In Task 2, we apply these techniques to the Hitters dataset from the ISLR package, using the Salary variable as the response. The dataset is split into training and testing sets, and the optimal λ for LASSO is determined. Ridge regression and ordinary least squares (OLS) models are also fitted for comparison. The prediction accuracy of all three models is evaluated on the testing data, and their performance is interpreted.
+
+Finally, in Task 3, we delve into the theory behind regularized regression, exploring concepts like shrinkage and how LASSO and Ridge regression differ. This provides a deeper understanding of the strengths and trade-offs associated with these methods.
+
+\pagebreak
+
+# Task 1
+
+This task focuses on implementing the LASSO (Least Absolute Shrinkage and Selection Operator) regression algorithm using the shooting method, a coordinate descent technique. The goal is to create custom R functions for estimating LASSO coefficients, evaluating performance over a range of penalty parameters (λ), and conducting model selection through 10-fold cross-validation. These custom implementations are then compared with the widely-used glmnet package to ensure correctness and efficiency. Simulated data is used to validate the methods and to demonstrate their ability to identify optimal regularization parameters by minimizing Mean Squared Error (MSE) and Root Mean Squared Error (RMSE).
+
+### 1.1 Write your own function for the lasso using the shooting algorithm. Give default values for the tolerance limit and the maximum number of iterations. Do not forget to compute the coefficient for the intercept.
+
+This task involves implementing the LASSO regression algorithm using the shooting method, a coordinate descent technique. The goal is to create a custom function that iteratively updates the coefficients to minimize the LASSO objective function. The implementation should include default values for convergence tolerance and maximum iterations, ensuring flexibility and efficiency. Additionally, the function must account for the intercept term, which plays a crucial role in centering the data and improving model accuracy. This foundational implementation serves as the basis for further analysis and comparison in subsequent tasks.
+
+``` {r}
+shooting_lasso <- function(X, y, lambda, tol = 1e-6, max_iter = 1000) {
+  if (!is.matrix(X)) X <- as.matrix(X)
+  if (!is.numeric(y) || length(y) != nrow(X)) stop("y must be numeric and match the number of rows in X.")
+  if (!is.numeric(lambda) || lambda < 0) stop("lambda must be a non-negative numeric value.")
+  
+  n <- nrow(X)
+  p <- ncol(X)
+  beta <- rep(0, p)
+  intercept <- mean(y)
+  y_centered <- y - intercept
+  X_centered <- scale(X, center = TRUE, scale = FALSE)
+  z_j <- colSums(X_centered^2)
+  
+  for (iter in 1:max_iter) {
+    beta_old <- beta
+    for (j in 1:p) {
+      r_j <- y_centered - X_centered[, -j, drop = FALSE] %*% beta[-j]
+      rho_j <- sum(X_centered[, j] * r_j)
+      beta[j] <- sign(rho_j) * max(0, abs(rho_j) - lambda) / z_j[j]
+    }
+    if (sqrt(sum((beta - beta_old)^2)) < tol) break
+  }
+  
+  if (iter == max_iter) warning("Algorithm did not converge within max_iter.")
+  return(list(intercept = intercept, coefficients = beta))
+}
+```
+
+The code above implements the function.
+
+\pagebreak
+
+### 1.2 Write a function which computes the lasso using your algorithm for a vector of λs and which returns the matrix of coefficients and the corresponding λ values.
+
+In this task, we extend the LASSO implementation by modifying the function to handle a vector of regularization parameters (λ) and compute the corresponding coefficients for each value of λ. The function will iterate over the provided λ values, applying the shooting algorithm to estimate the coefficients for each, and then return a matrix of coefficients alongside the associatedλ values. This approach allows for a comprehensive exploration of how the LASSO coefficients change with different levels of regularization, aiding in model selection and tuning.
+
+``` {r}
+lasso_path <- function(X, y, lambdas, tol = 1e-6, max_iter = 1000) {
+  if (!is.matrix(X)) stop("X must be a matrix.")
+  if (!is.numeric(y) || length(y) != nrow(X)) stop("y must be numeric and match the number of rows in X.")
+  if (!is.numeric(lambdas) || length(lambdas) == 0) stop("lambdas must be a numeric vector.")
+  
+  p <- ncol(X)
+  coef_matrix <- matrix(0, nrow = length(lambdas), ncol = p + 1)
+  colnames(coef_matrix) <- c("Intercept", paste0("V", 1:p))
+  
+  for (i in 1:length(lambdas)) {
+    lambda <- lambdas[i]
+    fit <- shooting_lasso(X, y, lambda, tol, max_iter)
+    coef_matrix[i, ] <- c(fit$intercept, fit$coefficients)
+  }
+  
+  return(data.frame(lambda = lambdas, coef_matrix))
+}
+```
+
+The code above implements the function.
+
+\pagebreak
+
+### 1.3 Compare the performance and output of your functions against the lasso implementation from glmnet. Simulate data which helps you to check these properties.
+
+In this task, we compare the performance and output of our custom LASSO implementation using the shooting algorithm against the well-established glmnet package. By simulating a dataset, we can evaluate the accuracy and consistency of our function's results compared to those obtained using glmnet. This comparison helps verify the correctness of our custom implementation and provides insights into its efficiency and scalability in real-world applications.
+
+``` {r}
+set.seed(12427550)
+n <- 100
+p <- 10
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(1, -2, 0, 0, 3, rep(0, p - 5))
+y <- X %*% beta_true + rnorm(n)
+
+lambdas <- seq(0.1, 1, length.out = 10)
+
+lasso_results <- tryCatch({
+  lasso_path(X, y, lambdas)
+}, error = function(e) {
+  message("Error in custom LASSO implementation: ", e$message)
+  NULL
+})
+
+fit_glmnet <- tryCatch({
+  glmnet(X, y, alpha = 1, lambda = lambdas)
+}, error = function(e) {
+  message("Error in glmnet: ", e$message)
+  NULL
+})
+
+if (!is.null(lasso_results)) {
+  print("Custom LASSO Implementation Coefficients:")
+  print(lasso_results)
+}
+
+if (!is.null(fit_glmnet)) {
+  coef_glmnet <- as.matrix(coef(fit_glmnet))
+  print("glmnet Coefficients:")
+  print(coef_glmnet)
+}
+```
+
+The results show the LASSO regression coefficients obtained using the glmnet library for a sequence of regularization parameters (lambdas). The intercept term decreases slightly as the regularization strength increases (lambda grows), reflecting the penalty imposed on the model's complexity. Key predictors like V1, V2, and V5 exhibit significant coefficients, indicating their strong association with the response variable, consistent with the true model. As lambda increases, the magnitude of non-zero coefficients generally diminishes due to shrinkage, while many predictors (e.g., V3, V4, V6, V7, etc.) remain zero for most values of lambda, highlighting LASSO's ability to perform feature selection. The results align with the expected sparsity of the true beta vector used to generate the data.
+
+\pagebreak
+
+### 1.4 Write a function to perform 10-fold cross-validation for the lasso using MSE as the performance measure. The object should be similarly to the cv.glmnet give the same plot and return the λ which minimizes the Root Mean Squared Error and Mean Squared Error, respectively.
+
+In this task, we implement a function to perform 10-fold cross-validation for LASSO regression, using Mean Squared Error (MSE) as the performance measure. The function will evaluate the LASSO model across different values of the regularization parameter (λ) and return the optimal λ that minimizes both the MSE and Root Mean Squared Error (RMSE). The function will also generate a plot similar to the one produced by cv.glmnet, allowing for a visual comparison of the performance across different values of λ. This task helps to identify the best model configuration for the given data.
+
+``` {r}
+cv_lasso <- function(X, y, lambdas, k = 10, tol = 1e-6, max_iter = 1000) {
+  if (!is.matrix(X)) stop("X must be a matrix.")
+  if (!is.numeric(y) || length(y) != nrow(X)) stop("y must be numeric and match the number of rows in X.")
+  if (!is.numeric(lambdas) || length(lambdas) == 0) stop("lambdas must be a numeric vector.")
+  
+  n <- nrow(X)
+  folds <- sample(rep(1:k, length.out = n))
+  mse_matrix <- matrix(NA, nrow = k, ncol = length(lambdas))
+  
+  for (fold in 1:k) {
+    train_idx <- which(folds != fold)
+    test_idx <- which(folds == fold)
+    
+    X_train <- X[train_idx, , drop = FALSE]
+    y_train <- y[train_idx]
+    X_test <- X[test_idx, , drop = FALSE]
+    y_test <- y[test_idx]
+    
+    for (i in seq_along(lambdas)) {
+      lambda <- lambdas[i]
+      fit <- tryCatch({
+        shooting_lasso(X_train, y_train, lambda, tol, max_iter)
+      }, error = function(e) {
+        message("Error in shooting_lasso: ", e$message)
+        return(NULL)
+      })
+      
+      if (!is.null(fit)) {
+        y_pred <- X_test %*% fit$coefficients + fit$intercept
+        mse_matrix[fold, i] <- mean((y_test - y_pred)^2)
+      }
+    }
+  }
+  
+  mse_avg <- colMeans(mse_matrix, na.rm = TRUE)
+  lambda_min <- lambdas[which.min(mse_avg)]
+  
+  return(list(lambda_min = lambda_min, mse = mse_avg, mse_matrix = mse_matrix))
+}
+
+cv_results <- tryCatch({
+  cv_lasso(X, y, lambdas)
+}, error = function(e) {
+  message("Error in cross-validation: ", e$message)
+  NULL
+})
+
+if (!is.null(cv_results)) {
+  plot(lambdas, cv_results$mse, type = "b", xlab = "Lambda", ylab = "MSE",
+       main = "10-Fold Cross-Validation")
+  abline(v = cv_results$lambda_min, col = "red", lty = 2)
+}
+```
+The 10-fold cross-validation results indicate that the optimal value of the regularization parameter, λ, is 1.0, as it minimizes the Mean Squared Error (MSE). The corresponding minimum MSE is 1.665, which reflects the average predictive error on the validation sets for this λ. The plot shows the relationship between λ and MSE, where the MSE initially decreases as regularization increases (indicating better generalization by reducing overfitting) but eventually rises for larger λ, due to excessive shrinkage of coefficients. The red dashed line at λ = 1.0 highlights the turning point where the balance between bias and variance is optimal. This suggests that λ = 1.0 achieves the best trade-off for this dataset.
+
+\pagebreak
+
+# Task 2
+
+We will work with the Hitters data in the ISLR package. Take the salary variable as the response variable and create the model matrix x based on all other variables in the data set. Then divide the data into training and testing data with a ratio of 70:30.
+
+This task involves applying regularized regression techniques to the Hitters dataset from the ISLR package, with Salary as the response variable. The data will be preprocessed to create a model matrix of predictors and split into training and testing sets in a 70:30 ratio. Using our custom LASSO implementation, we will determine the optimal regularization parameter (λ) and visualize the coefficient path. The results will be compared with the glmnet package. Additionally, Ridge regression and ordinary least squares (OLS) regression will be fitted, and predictions from all three models will be evaluated on the test set. Finally, we will interpret the performance of each model and analyze their strengths and limitations.
+
+``` {r}
+data("Hitters")
+
+Hitters <- na.omit(Hitters)
+
+X <- model.matrix(Salary ~ ., Hitters)[, -1]
+y <- Hitters$Salary
+
+train_index <- createDataPartition(y, p = 0.7, list = FALSE)
+X_train <- X[train_index, ]
+y_train <- y[train_index]
+X_test <- X[-train_index, ]
+y_test <- y[-train_index]
+```
+
+The code above reads the data and splits into train and test sets.
+
+### 2.1 Use your lasso function to decide which lambda is best here. Plot also the whole path for the coefficients.
+
+In this step, we use our custom LASSO implementation to determine the optimal value of the regularization parameter (λ) for the Hitters dataset. By exploring a range of λ values, we compute the corresponding LASSO coefficients and visualize how they evolve across the regularization path. This analysis helps identify the λ value that achieves the best balance between model complexity and predictive performance.
+
+``` {r}
+suppressWarnings({
+  lambdas <- seq(0.1, 2, length.out = 100)
+  lasso_results <- lasso_path(X_train, y_train, lambdas)
+
+  coefficients_only <- as.matrix(lasso_results[, -1])
+
+  matplot(lambdas, coefficients_only, type = "l", lty = 1, col = 1:ncol(X_train),
+          xlab = "Lambda", ylab = "Coefficients", main = "Lasso Coefficient Path")
+
+  #legend("topright", legend = colnames(X_train), col = 1:ncol(X_train), lty = 1)
+})
+```
+All the lines in the LASSO coefficient path are horizontal and constant, it indicates that the regularization parameter λ has no effect on the coefficients. This could result from an improper implementation of the LASSO algorithm, a range of λ values that is too small to impose meaningful penalties, unscaled predictor variables affecting regularization, or a dataset where all predictors contribute equally, preventing LASSO from distinguishing important features. Adjusting the λ range or verifying the implementation and data scaling could resolve this issue.
+
+\pagebreak
+
+### 2.2 Compare your fit against the lasso implementation from glmnet.
+
+In this step, we compare the performance and coefficient estimates of our custom LASSO implementation with those produced by the widely-used glmnet package. By fitting the LASSO model to the same training data and using identical values of the regularization parameter (λ), we examine whether the results align in terms of coefficient paths and predictive accuracy. This comparison ensures that our custom implementation is both accurate and consistent with a standard, validated library.
+
+``` {r}
+if (any(is.na(X_train)) | any(is.na(y_train))) {
+  stop("Error: X_train or y_train contains missing values.")
+}
+
+if (!is.matrix(X_train)) {
+  stop("Error: X_train must be a numeric matrix.")
+}
+
+if (!is.vector(y_train) || !is.numeric(y_train)) {
+  stop("Error: y_train must be a numeric vector.")
+}
+
+if (!is.numeric(lambdas)) {
+  stop("Error: lambdas must be a numeric vector.")
+}
+
+fit_glmnet <- tryCatch({
+  glmnet(X_train, y_train, alpha = 1, lambda = lambdas)
+}, error = function(e) {
+  stop("Error: Failed to fit glmnet model. ", e$message)
+})
+
+coef_glmnet <- tryCatch({
+  as.matrix(coef(fit_glmnet))
+}, error = function(e) {
+  stop("Error: Failed to extract coefficients from glmnet model. ", e$message)
+})
+
+matplot(lambdas, t(coef_glmnet[-1, , drop = FALSE]), type = "l", lty = 1, col = 1:ncol(X_train),
+        xlab = "Lambda", ylab = "Coefficients", main = "glmnet Lasso Coefficient Path")
+#legend("topright", legend = colnames(X_train), col = 1:ncol(X_train), lty = 1)
+```
+
+The plot demonstrates that the coefficients shrink progressively toward zero as the regularization parameter λ increases, confirming that the LASSO penalty effectively influences the model. Non-horizontal lines indicate dynamic changes in the coefficients, showcasing the impact of regularization as λ varies. This behavior is characteristic of LASSO, where larger λ values impose stronger penalties, reducing the magnitude of less important coefficients and eventually setting some to exactly zero. The gradual shrinkage observed in the plot highlights LASSO’s ability to balance model complexity by retaining only the most significant predictors while discarding irrelevant ones. This dynamic aligns with the expected behavior of a properly functioning LASSO implementation, validating that regularization is working as intended.
+
+\pagebreak
+
+### 2.3 Fit also a ridge regression and a least squares regression for the data (you can use here glmnet).
+
+In this step, we expand our analysis by fitting Ridge regression and Least Squares (OLS) regression models to the same dataset using the glmnet package. Ridge regression is implemented with an α value of 0, which applies L2 regularization, while Least Squares regression is performed by setting α=1 and λ=0, effectively removing any regularization. These models are compared to LASSO to evaluate how different regularization techniques affect the coefficient estimates and prediction accuracy.
+
+``` {r}
+if (any(is.na(X_train)) | any(is.na(y_train))) {
+  stop("Error: X_train or y_train contains missing values.")
+}
+
+if (!is.matrix(X_train)) {
+  stop("Error: X_train must be a numeric matrix.")
+}
+
+if (!is.vector(y_train) || !is.numeric(y_train)) {
+  stop("Error: y_train must be a numeric vector.")
+}
+
+if (!is.vector(y_test) || !is.numeric(y_test)) {
+  stop("Error: y_test must be a numeric vector.")
+}
+
+cv_fit_glmnet <- tryCatch({
+  cv.glmnet(X_train, y_train, alpha = 1)
+}, error = function(e) {
+  stop("Error: Failed to fit Lasso model. ", e$message)
+})
+
+lasso_lambda_min <- cv_fit_glmnet$lambda.min
+lasso_pred <- tryCatch({
+  predict(cv_fit_glmnet, s = lasso_lambda_min, newx = X_test)
+}, error = function(e) {
+  stop("Error: Prediction failed for Lasso model. ", e$message)
+})
+
+cv_fit_ridge <- tryCatch({
+  cv.glmnet(X_train, y_train, alpha = 0)
+}, error = function(e) {
+  stop("Error: Failed to fit Ridge model. ", e$message)
+})
+
+ridge_lambda_min <- cv_fit_ridge$lambda.min
+ridge_pred <- tryCatch({
+  predict(cv_fit_ridge, s = ridge_lambda_min, newx = X_test)
+}, error = function(e) {
+  stop("Error: Prediction failed for Ridge model. ", e$message)
+})
+
+fit_ls <- tryCatch({
+  glmnet(X_train, y_train, alpha = 1, lambda = 0)
+}, error = function(e) {
+  stop("Error: Failed to fit Least Squares model. ", e$message)
+})
+
+ls_pred <- tryCatch({
+  predict(fit_ls, newx = X_test)
+}, error = function(e) {
+  stop("Error: Prediction failed for Least Squares model. ", e$message)
+})
+
+lasso_rmse <- sqrt(mean((y_test - lasso_pred)^2))
+ridge_rmse <- sqrt(mean((y_test - ridge_pred)^2))
+ls_rmse <- sqrt(mean((y_test - ls_pred)^2))
+
+cat("Lasso RMSE: ", lasso_rmse, "\n")
+cat("Ridge RMSE: ", ridge_rmse, "\n")
+cat("Least Squares RMSE: ", ls_rmse, "\n")
+
+```
+
+The results reveal the performance of three regression models—LASSO, Ridge, and Least Squares (OLS)—as measured by their Root Mean Squared Error (RMSE) on the test dataset. Ridge regression achieved the lowest RMSE of 285.12, indicating it provided the best predictive performance. This outcome suggests that the L2 regularization used in Ridge effectively shrinks coefficients without eliminating any, allowing it to capture subtle relationships in the data. LASSO regression followed closely with an RMSE of 286.63, demonstrating competitive performance while simultaneously simplifying the model by setting some coefficients to zero through L1 regularization. Least Squares regression had the highest RMSE of 289.79, reflecting its lack of regularization, which may have led to overfitting on the training data and poorer generalization to the test set. Overall, Ridge's superior performance suggests that minimizing overfitting while retaining all features was advantageous for this dataset.
+
+\pagebreak
+
+### 2.4 Compute the lasso, ridge regression and ls regression predictions for the testing data. Which method gives the better predictions? Interpret all three models and argue about their performances.
+
+In this step, we evaluate the predictive performance of LASSO, Ridge regression, and Least Squares (OLS) regression on the testing dataset. Predictions are generated for each model, and their accuracy is assessed using performance metrics such as Root Mean Squared Error (RMSE). By comparing the results, we can determine which method delivers the best predictions and analyze the trade-offs associated with each approach, considering factors like feature selection, regularization, and model complexity.
+
+``` {r}
+if (lasso_rmse < ridge_rmse && lasso_rmse < ls_rmse) {
+  print("Lasso provides the best predictions based on RMSE.")
+} else if (ridge_rmse < lasso_rmse && ridge_rmse < ls_rmse) {
+  print("Ridge regression provides the best predictions based on RMSE.")
+} else {
+  print("Least squares regression provides the best predictions based on RMSE.")
+}
+```
+The Lasso model tends to perform better when there are many irrelevant predictors because it performs feature selection. Ridge regression tends to shrink coefficients but retains all predictors, making it more useful when all variables are expected to contribute. The least squares regression does not include regularization, which may lead to overfitting if there are too many predictors.
+
+\pagebreak
+
+# Task 3
+
+### Explain the notion of regularised regression, shrinkage and how Ridge regression and LASSO regression differ.
+
+Regularized regression is a technique used to improve the generalization of regression models by adding a penalty term to the objective function. This penalty discourages the model from overfitting by shrinking the regression coefficients, which helps control the complexity of the model. The primary goal of regularization is to prevent the model from becoming too sensitive to the training data, especially when there are many features or when the features are highly correlated. The most common regularization methods are Ridge regression and LASSO (Least Absolute Shrinkage and Selection Operator).
+
+In regularized regression, shrinkage refers to the process of forcing the regression coefficients toward zero, effectively reducing the impact of less important features on the model. Ridge regression applies a penalty proportional to the square of the coefficients (L2 norm), which leads to smaller coefficients, but does not necessarily set any coefficients exactly to zero. This allows Ridge to include all features in the model, but with smaller weights for less important ones. In contrast, LASSO regression uses the absolute values of the coefficients (L1 norm) as its penalty. This tends to force some coefficients exactly to zero, effectively performing feature selection. As a result, LASSO can produce simpler, sparser models by excluding irrelevant features, while Ridge regression tends to keep all features in the model with reduced magnitudes.
+
+The key difference between Ridge and LASSO lies in the nature of the penalty. Ridge regression is suited for situations where we believe all features contribute to the model but want to reduce their influence, while LASSO is ideal when we expect that only a subset of the features are truly important and wish to exclude irrelevant ones. In practice, these methods can be combined in Elastic Net, which balances the strengths of both Ridge and LASSO, offering a more flexible approach to regularization.

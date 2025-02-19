@@ -1,0 +1,4 @@
+"0","try({"
+"0","  print(bootstrap_results)"
+"0","  print(parametric_results)"
+"0","}, silent = FALSE)"

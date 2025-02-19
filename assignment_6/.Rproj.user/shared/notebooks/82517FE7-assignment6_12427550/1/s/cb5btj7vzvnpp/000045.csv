@@ -1,0 +1,2 @@
+"0",""
+"0","legend(""topright"", legend = c(""Linear"", ""Logarithmic"", ""Poly2"", ""Poly3"", ""Poly10""), col = c(""blue"", ""red"", ""green"", ""purple"", ""orange""), lwd = 2)"

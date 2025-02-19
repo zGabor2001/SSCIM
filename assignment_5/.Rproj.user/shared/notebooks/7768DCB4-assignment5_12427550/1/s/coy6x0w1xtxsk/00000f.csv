@@ -1,0 +1,2 @@
+"0","boxplot(x1, x2, names = c(""Sample 1"", ""Sample 2""), main = ""Comparison of Samples"","
+"0","        ylab = ""Values"", col = c(""skyblue"", ""lightgreen""))"

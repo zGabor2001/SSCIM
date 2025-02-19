@@ -1,0 +1,1 @@
+"0","hist(bootstrap_mean_x_clean$t, main = ""Nicht-parametrischer Bootstrap für den Mittelwert (x_clean)"", xlab = ""Mittelwert"", col = ""lightgreen"")"

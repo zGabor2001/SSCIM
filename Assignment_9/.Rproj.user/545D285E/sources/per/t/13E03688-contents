@@ -1,0 +1,141 @@
+---
+title: "Assignment 9"
+author: "Gabor Zeke"
+date: "2025-01-13"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# MCMC - Gibbs Sampling, Metropolis-Hastings Sampling
+
+This task involves implementing sampling techniques to explore a standard bivariate normal distribution with mean vector $\mu = [0, 0]$ and covariance matrix 
+
+$$
+\Sigma = \begin{bmatrix} 1 & \rho \\ \rho & 1 \end{bmatrix},
+$$
+
+where the correlation parameter is set to $\rho = 0.5$. The joint probability density function (p.d.f.) is given by:
+
+$$
+p(\theta_1, \theta_2) = \frac{1}{2\pi\sqrt{1-\rho^2}} \exp\left(-\frac{1}{2(1-\rho^2)} \left(\theta_1^2 - 2\rho\theta_1\theta_2 + \theta_2^2\right)\right),
+$$
+
+with $\theta_1, \theta_2 \in \mathbb{R}$ and $\rho \in [0, 1]$. The marginal distributions are standard normal:
+
+$$
+p(\theta_i) = \frac{1}{\sqrt{2\pi}} \exp\left(-\frac{1}{2}\theta_i^2\right), \quad i = 1, 2.
+$$
+
+Using Gibbs sampling and the Metropolis-Hastings algorithm, we aim to sample from this distribution with a chain size $M = 30,000$. The Gibbs sampler is initialized using a non-informative prior, and diagnostic tools are used to evaluate the convergence and performance of the resulting chains.
+
+``` {r}
+library(coda)
+
+rho <- 0.5
+mu <- c(0, 0)
+sigma <- matrix(c(1, rho, rho, 1), nrow = 2)
+M <- 30000
+
+gibbs_sampler <- function(mu, sigma, rho, M, init) {
+  if (!is.numeric(mu) || length(mu) != 2) {
+    stop("mu must be a numeric vector of length 2.")
+  }
+  if (!is.matrix(sigma) || nrow(sigma) != 2 || ncol(sigma) != 2) {
+    stop("sigma must be a 2x2 matrix.")
+  }
+  if (!is.numeric(rho) || rho < -1 || rho > 1) {
+    stop("rho must be a numeric value between -1 and 1.")
+  }
+  if (!is.numeric(M) || M <= 0 || M != as.integer(M)) {
+    stop("M must be a positive integer.")
+  }
+  if (!is.numeric(init) || length(init) != 2) {
+    stop("init must be a numeric vector of length 2.")
+  }
+
+  if (det(sigma) <= 0) {
+    stop("Covariance matrix sigma must be positive semi-definite.")
+  }
+
+  samples <- matrix(0, nrow = M, ncol = 2)
+  samples[1, ] <- init
+
+  for (i in 2:M) {
+    tryCatch({
+      mu1_given_2 <- mu[1] + rho * (samples[i-1, 2] - mu[2])
+      var1_given_2 <- 1 - rho^2
+      if (var1_given_2 <= 0) stop("Variance for theta_1 given theta_2 must be positive.")
+      samples[i, 1] <- rnorm(1, mean = mu1_given_2, sd = sqrt(var1_given_2))
+      
+      mu2_given_1 <- mu[2] + rho * (samples[i, 1] - mu[1])
+      var2_given_1 <- 1 - rho^2
+      if (var2_given_1 <= 0) stop("Variance for theta_2 given theta_1 must be positive.")
+      samples[i, 2] <- rnorm(1, mean = mu2_given_1, sd = sqrt(var2_given_1))
+      
+    }, error = function(e) {
+      cat("Error in iteration", i, ": ", e$message, "\n")
+      return(NULL)
+    })
+  }
+  
+  return(samples)
+}
+```
+
+This R code implements a Gibbs sampler to generate samples from a bivariate normal distribution with a mean vector of (0, 0) and a covariance matrix defined by rho = 0.5. The gibbs_sampler function creates a matrix to store the samples and starts with an initial value for the first sample. It iteratively updates each variable, theta_1 and theta_2, using their conditional distributions. For theta_1, the function calculates the conditional mean and variance based on the previous value of theta_2, then draws a new sample from this conditional normal distribution. Similarly, theta_2 is updated using the new value of theta_1. This process is repeated for 30,000 iterations, generating samples that approximate the target bivariate normal distribution.
+
+``` {r}
+set.seed(12427550)
+chain1 <- gibbs_sampler(mu, sigma, rho, M, c(0, 0))
+chain2 <- gibbs_sampler(mu, sigma, rho, M, c(1, 1))
+
+mcmc_chain1 <- mcmc(chain1)
+mcmc_chain2 <- mcmc(chain2)
+mcmc_list <- mcmc.list(mcmc_chain1, mcmc_chain2)
+```
+
+This R code sets a random seed for reproducibility and runs the Gibbs sampler twice to generate two chains of samples from the bivariate normal distribution. The gibbs_sampler function is called with different initial values: the first chain starts at (0, 0) and the second chain starts at (1, 1). The resulting chains are then converted into mcmc objects using the coda package, which provides functions for Markov Chain Monte Carlo analysis. These two mcmc chains are combined into an mcmc.list object, allowing for further analysis and comparison of the two chains.
+
+``` {r}
+par(mfrow = c(2, 2))
+plot(mcmc_chain1[, 1], 
+     type = "l", 
+     main = expression("Chain 1: " ~ theta[1]), 
+     ylab = "Value", 
+     xlab = "Iteration")
+plot(mcmc_chain2[, 1], 
+     type = "l", 
+     main = expression("Chain 2: " ~ theta[1]), 
+     ylab = "Value", 
+     xlab = "Iteration")
+plot(mcmc_chain1[, 2], 
+     type = "l", main = 
+       expression("Chain 1: " ~ theta[2]), 
+     ylab = "Value", 
+     xlab = "Iteration")
+plot(mcmc_chain2[, 2], 
+     type = "l", 
+     main = expression("Chain 2: " ~ theta[2]), 
+     ylab = "Value", 
+     xlab = "Iteration")
+
+gelman_diag <- gelman.diag(mcmc_list)
+print(gelman_diag)
+
+summary(mcmc_list)
+
+par(mfrow = c(2, 2))
+acf(mcmc_chain1[, 1], main = expression("ACF Chain 1: " ~ theta[1]))
+acf(mcmc_chain2[, 1], main = expression("ACF Chain 2: " ~ theta[1]))
+acf(mcmc_chain1[, 2], main = expression("ACF Chain 1: " ~ theta[2]))
+acf(mcmc_chain2[, 2], main = expression("ACF Chain 2: " ~ theta[2]))
+```
+
+This R code generates various diagnostic plots and analyses for the two MCMC chains (chain1 and chain2) produced by the Gibbs sampler. First, it creates a 2x2 grid of trace plots showing the values of θ1 and θ2 over iterations for both chains. These plots help assess the convergence and mixing of the chains. Next, it calculates and prints the Gelman-Rubin diagnostic (gelman.diag) to check for convergence between the two chains, and provides a summary of the MCMC results. Finally, it generates autocorrelation function (ACF) plots for each parameter in both chains, allowing an examination of the dependency between successive samples in the chains. These diagnostic tools are essential for evaluating the quality of the MCMC sampling process.
+
+The results indicate that the Gibbs sampler has successfully converged to the target bivariate normal distribution. The Gelman-Rubin diagnostic shows a potential scale reduction factor (PSRF) of 1 for both parameters, as well as the multivariate distribution, confirming convergence across chains. The empirical means (0.0015 for θ1 and 0.0065 for θ2) are close to the theoretical value of 0 for a standard normal distribution, and the standard deviations (0.9941 for θ1 and 1.0015 for θ2) align well with the expected value of 1. The credible intervals ([−1.953,1.937] for θ1 and [−1.955,1.969] for θ2) and other quantiles are consistent with the properties of a standard normal distribution. While there is some mild autocorrelation indicated by the slightly larger time-series standard errors compared to the naive standard errors, it is not significant enough to impact the validity of the results. Overall, the chains have converged and provide an accurate representation of the target distribution.

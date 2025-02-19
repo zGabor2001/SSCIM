@@ -1,0 +1,92 @@
+---
+title: "Assignment 10"
+author: "Gabor Zeke"
+date: "2025-01-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DPpackage)
+```
+
+# Introduction
+
+This task involves simulating data from a mixture of two normal linear regression models, where the mixture weights depend on a predictor variable x, with distinct error variances and a non-linear mean function for the second component. The goal is to model the conditional density of y∣x using the DPcdensity function from the DPpackage in R, a tool for Bayesian semi- and nonparametric modeling. The simulation involves generating n=500 observations with x∼Uniform(0,1) and y sampled from the specified mixture model. The DPcdensity function is then applied with given hyperparameters and Markov chain Monte Carlo (MCMC) settings to estimate the posterior distribution. The results include traceplots and density plots for the true conditional densities of y∣x, the posterior mean estimates, and pointwise 95% highest posterior density (HPD) intervals for specific values of x (0.1, 0.25, 0.5, and 0.75).
+
+### 1. Simulate n = 500 observations from from a mixture of two normal linear regression models, with the mixture weights depending on the predictor, with different error variances and with a non-linear mean function for the second component, yi|xi∼ind.e−2xi⋅N(yi|xi,0.01)+(1−e−2xi)N(yi|x4i,0.04),i=1,…,n,where the predictor values xi are simulated from a uniform distribution, xi∼iidU(0,1).
+
+
+``` {r}
+set.seed(12427550)
+
+n <- 500
+x <- runif(n, 0, 1)
+w1 <- exp(-2 * x)
+w2 <- 1 - w1
+
+y <- numeric(n)
+for (i in 1:n) {
+  if (runif(1) < w1[i]) {
+    y[i] <- rnorm(1, mean = x[i], sd = sqrt(0.01))
+  } else {
+    y[i] <- rnorm(1, mean = x[i]^4, sd = sqrt(0.04))
+  }
+}
+
+data <- data.frame(x = x, y = y)
+```
+
+\pagebreak
+
+### 2. Apply the DPcdensity function from package DPpackage, was fitted using the following hyper-parameters: a0=10,b0=1,ν1=ν2=4,m2=(y^,x^)′,τ1=6.01,τ2=3.01,andS2=Ψ−12, where S is the sample covariance matrix for the response and predictor. A total number of 25,000 scans of the Markov chain cycle implemented in the DPcdensity function were completed. A burn-in period of 5,000 samples was considered and the chain was subsampled every 4 iterates to get a final sample size of 5,000. The following commands were used to fit the model, where the conditional density estimates were evaluated on a grid of 100 points on the range of the response,
+
+``` {r}
+prior <- list(
+  a0 = 10, b0 = 1,
+  nu1 = 4, nu2 = 4,
+  m2 = colMeans(data),
+  tau1 = 6.01, tau2 = 3.01,
+  S2 = solve(var(data))
+)
+
+mcmc <- list(
+  nblow = 5000,
+  nskip = 3,
+  nsave = 5000,
+  ndisplay = 1000
+)
+
+fit <- DPcdensity(
+  y = y, x = x,
+  prior = prior,
+  mcmc = mcmc,
+  status = TRUE
+)
+```
+
+\pagebreak
+
+### 3. Provide the traceplot and density plots for the true conditional densities of y|x along with the posterior mean estimates and point-wise 95% HPD intervals for several values of x, such as: (a) x = 0.1, (b) x = 0.25, (c) x = 0.5, (d) x = 0.75 .
+
+``` {r}
+posterior_samples <- fit$save.state$thetasave
+
+par(mfrow = c(2, 2))
+plot(posterior_samples[, 1], type = "l", main = "Traceplot for Parameter 1", ylab = "Value")
+plot(posterior_samples[, 2], type = "l", main = "Traceplot for Parameter 2", ylab = "Value")
+
+x_vals <- c(0.1, 0.25, 0.5, 0.75)
+par(mfrow = c(2, 2))
+for (x0 in x_vals) {
+  grid <- seq(min(y), max(y), length = 100)
+  cond_density <- predict(fit, newdata = x0, grid = grid)
+  
+  plot(grid, cond_density$mean, type = "l", col = "blue",
+       main = paste("Conditional Density (x =", x0, ")"),
+       xlab = "y", ylab = "Density")
+  
+  lines(grid, cond_density$hpd[, 1], col = "red", lty = 2)
+  lines(grid, cond_density$hpd[, 2], col = "red", lty = 2)
+}
+```

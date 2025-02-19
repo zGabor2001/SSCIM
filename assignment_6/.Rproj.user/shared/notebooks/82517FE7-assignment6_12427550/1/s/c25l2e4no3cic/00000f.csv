@@ -1,0 +1,10 @@
+"0","# Function to perform Cross-Validation"
+"0","perform_cv_economics <- function(model, data, folds) {"
+"0","  cv_result <- cv.glm(data, model, K = folds)"
+"0","  return(c(CV_MSE = cv_result$delta[1], CV_RMSE = sqrt(cv_result$delta[1])))"
+"0","}"
+"0",""
+"0","# Perform Leave-One-Out Cross-Validation for all models"
+"0","cv_loo_linear <- perform_cv_economics(linear_model, economics, 1)"
+"2","Error in cv.glm(data, model, K = folds) : 'K' outside allowable range
+"

@@ -1,0 +1,1 @@
+"0","lines(economics$uempmed, predict(poly10_model), col = ""orange"", lwd = 2)"

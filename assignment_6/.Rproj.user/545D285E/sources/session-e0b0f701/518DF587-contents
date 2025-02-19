@@ -1,0 +1,356 @@
+---
+title: "Assignment 5"
+author: "Gabor Zeke"
+date: "2024-12-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ISLR)
+library(boot)
+library(ggplot2)
+```
+
+# Introduction
+
+This task focuses on exploring model fitting, evaluation, and comparison using real-world datasets to deepen understanding of regression techniques and model validation. In Task 1, we analyze the Auto dataset from the ISLR package by fitting three models to explain the relationship between miles per gallon (mpg) and horsepower: a linear model, a quadratic polynomial, and a cubic polynomial. We compare the models using the validation set approach with two train/test splits (50/50 and 70/30), and evaluate their performance using metrics like Root Mean Squared Error (RMSE), Mean Squared Error (MSE), and Median Absolute Deviation (MAD). Additionally, we employ Leave-One-Out Cross Validation (LOOCV), 5-fold, and 10-fold Cross Validation to systematically assess the models. In Task 2, we analyze the economics dataset from the ggplot2 package to model the relationship between the number of unemployed persons (unemploy) and the median duration of unemployment (uempmed). Using linear, exponential/logarithmic, and polynomial models (degrees 2, 3, and 10), we evaluate their fits and validate them through graphical comparisons and cross-validation methods. The task concludes with insights into concepts like underfitting, overfitting, and the role of different cross-validation approaches in selecting optimal models.
+
+\pagebreak
+
+### Load data
+
+``` {r}
+data("Auto")
+str(Auto)
+
+summary(Auto)
+
+?Auto
+```
+\pagebreak
+
+### 1.1 Fit models
+
+In this task, we aim to explore the relationship between miles per gallon (mpg) and horsepower in the Auto dataset from the ISLR package by fitting three different regression models: a linear model, a quadratic polynomial model, and a cubic polynomial model. To understand and compare the performance of these models, we will plot the data points (mpg vs. horsepower) and overlay the predictions from each model. This visualization will help us assess how well each model captures the underlying trends in the data and evaluate their suitability for explaining the relationship between the two variables.
+
+``` {r}
+linear_model <- tryCatch(glm(mpg ~ horsepower, data = Auto), error = function(e) NULL)
+quadratic_model <- tryCatch(glm(mpg ~ poly(horsepower, 2), data = Auto), error = function(e) NULL)
+cubic_model <- tryCatch(glm(mpg ~ poly(horsepower, 3), data = Auto), error = function(e) NULL)
+
+if (!is.null(linear_model) & !is.null(quadratic_model) & !is.null(cubic_model)) {
+  plot(Auto$horsepower, 
+       Auto$mpg, 
+       main = "mpg vs horsepower", 
+       xlab = "Horsepower",
+       ylab = "MPG", 
+       pch = 16)
+
+  lines(Auto$horsepower, predict(linear_model), col = "blue", lwd = 2)
+  lines(Auto$horsepower, predict(quadratic_model), col = "red", lwd = 2)
+  lines(Auto$horsepower, predict(cubic_model), col = "green", lwd = 2)
+
+  legend("topright", 
+         legend = c("Linear", "Quadratic", "Cubic"), 
+         col = c("blue", "red", "green"), 
+         lwd = 2)
+} else {
+  print("Error in fitting models")
+}
+
+```
+The plot displays the fitting of the different models.
+
+\pagebreak
+
+### 1.2 Use the validation set approach to compare the models. Use once a train/test split of 50%/50% and once 70%/30%. Choose the best model based on Root Mean Squared Error, Mean Squared Error and Median Absolute Deviation.
+
+In this task, we use the validation set approach to compare the performance of three regression models—linear, quadratic, and cubic—fitted to the relationship between mpg and horsepower in the Auto dataset. We split the data into training and test sets twice, with ratios of 50/50 and 70/30, and evaluate each model’s performance on the test set using Root Mean Squared Error (RMSE), Mean Squared Error (MSE), and Median Absolute Deviation (MAD). This comparison helps determine which model best balances accuracy and complexity for predicting mpg based on horsepower.
+
+``` {r}
+evaluate_model <- function(model, test_data) {
+  tryCatch({
+    predictions <- predict(model, newdata = test_data)
+    actuals <- test_data$mpg
+    mse <- mean((predictions - actuals)^2)
+    rmse <- sqrt(mse)
+    mad <- median(abs(predictions - actuals))
+    
+    return(c(MSE = mse, RMSE = rmse, MAD = mad))
+  }, error = function(e) {
+    message("Error in evaluating model: ", e$message)
+    return(c(MSE = NA, RMSE = NA, MAD = NA))
+  })
+}
+
+set.seed(12427550)
+
+train_indices_50 <- tryCatch({
+  sample(1:nrow(Auto), size = nrow(Auto) / 2)
+}, error = function(e) {
+  message("Error in sampling for 50% training data: ", e$message)
+  return(NULL)
+})
+
+if (!is.null(train_indices_50)) {
+  train_data_50 <- Auto[train_indices_50, ]
+  test_data_50 <- Auto[-train_indices_50, ]
+  
+  linear_model_50 <- tryCatch(glm(mpg ~ horsepower, data = train_data_50), error = function(e) NULL)
+  quadratic_model_50 <- tryCatch(glm(mpg ~ poly(horsepower, 2), data = train_data_50), error = function(e) NULL)
+  cubic_model_50 <- tryCatch(glm(mpg ~ poly(horsepower, 3), data = train_data_50), error = function(e) NULL)
+  
+  if (!is.null(linear_model_50) & !is.null(quadratic_model_50) & !is.null(cubic_model_50)) {
+    results_50 <- data.frame(
+      Linear = evaluate_model(linear_model_50, test_data_50),
+      Quadratic = evaluate_model(quadratic_model_50, test_data_50),
+      Cubic = evaluate_model(cubic_model_50, test_data_50)
+    )
+    print(results_50)
+  } else {
+    message("Error in fitting models for 50% training data")
+  }
+} else {
+  message("Error in generating training indices for 50% training data")
+}
+
+train_indices_70 <- tryCatch({
+  sample(1:nrow(Auto), size = 0.7 * nrow(Auto))
+}, error = function(e) {
+  message("Error in sampling for 70% training data: ", e$message)
+  return(NULL)
+})
+
+if (!is.null(train_indices_70)) {
+  train_data_70 <- Auto[train_indices_70, ]
+  test_data_70 <- Auto[-train_indices_70, ]
+  
+  linear_model_70 <- tryCatch(glm(mpg ~ horsepower, data = train_data_70), error = function(e) NULL)
+  quadratic_model_70 <- tryCatch(glm(mpg ~ poly(horsepower, 2), data = train_data_70), error = function(e) NULL)
+  cubic_model_70 <- tryCatch(glm(mpg ~ poly(horsepower, 3), data = train_data_70), error = function(e) NULL)
+  
+  if (!is.null(linear_model_70) & !is.null(quadratic_model_70) & !is.null(cubic_model_70)) {
+    results_70 <- data.frame(
+      Linear = evaluate_model(linear_model_70, test_data_70),
+      Quadratic = evaluate_model(quadratic_model_70, test_data_70),
+      Cubic = evaluate_model(cubic_model_70, test_data_70)
+    )
+    print(results_70)
+  } else {
+    message("Error in fitting models for 70% training data")
+  }
+} else {
+  message("Error in generating training indices for 70% training data")
+}
+```
+
+The results of the validation set approach, with 50%/50% and 70%/30% train/test splits, suggest that the cubic model performs best in terms of minimizing both the Mean Squared Error (MSE) and Root Mean Squared Error (RMSE) across both splits. Specifically, with the 50%/50% split, the cubic model achieves the lowest MSE (17.87) and RMSE (4.23), followed closely by the quadratic model. The linear model performs the worst, with an MSE of 23.01 and an RMSE of 4.80. When considering the 70%/30% split, the linear model has a slightly higher MSE (19.20) compared to the quadratic (20.05) and cubic (21.61) models, while the cubic model again shows the highest RMSE (4.65).
+
+In terms of Median Absolute Deviation (MAD), the quadratic model performs the best in both splits, with a MAD of 2.65 for the 50%/50% split and 2.48 for the 70%/30% split. The linear model has the highest MAD value in both cases, indicating that its predictions are the least consistent.
+
+Overall, the cubic model provides the best fit in terms of MSE and RMSE, though the quadratic model offers a better balance when considering MAD, suggesting that it may be the most robust model. The linear model, while simple, performs the worst in most metrics, particularly in the 50%/50% split. Therefore, the choice of the best model depends on the priority—whether minimizing MSE/RMSE or ensuring robustness with a lower MAD.
+
+\pagebreak
+
+### 1.3 Use the cv.glm function in the boot package for the following steps.
+
+In this task, we use the cv.glm function from the boot package to evaluate and compare the performance of three regression models—linear, quadratic, and cubic—fitted to the mpg vs. horsepower relationship in the Auto dataset. The models are assessed using Leave-One-Out Cross Validation (LOOCV), 5-fold Cross Validation, and 10-fold Cross Validation. These methods provide robust estimates of model performance by minimizing overfitting and underfitting risks, enabling a fair comparison of the models' predictive accuracy and generalization capabilities.
+
+``` {r}
+perform_cv <- function(model, data, folds) {
+  tryCatch({
+    cv_result <- cv.glm(data, model, K = folds)
+    return(c(CV_MSE = cv_result$delta[1], CV_RMSE = sqrt(cv_result$delta[1])))
+  }, error = function(e) {
+    message("Error in performing cross-validation: ", e$message)
+    return(c(CV_MSE = NA, CV_RMSE = NA))
+  })
+}
+
+cv_loo_linear <- tryCatch({
+  cv.glm(Auto, linear_model)
+}, error = function(e) {
+  message("Error in LOO cross-validation for linear model: ", e$message)
+  return(NULL)
+})
+
+cv_loo_quadratic <- tryCatch({
+  cv.glm(Auto, quadratic_model)
+}, error = function(e) {
+  message("Error in LOO cross-validation for quadratic model: ", e$message)
+  return(NULL)
+})
+
+cv_loo_cubic <- tryCatch({
+  cv.glm(Auto, cubic_model)
+}, error = function(e) {
+  message("Error in LOO cross-validation for cubic model: ", e$message)
+  return(NULL)
+})
+
+cv_5fold_linear <- tryCatch({
+  perform_cv(linear_model, Auto, 5)
+}, error = function(e) {
+  message("Error in 5-fold cross-validation for linear model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+cv_5fold_quadratic <- tryCatch({
+  perform_cv(quadratic_model, Auto, 5)
+}, error = function(e) {
+  message("Error in 5-fold cross-validation for quadratic model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+cv_5fold_cubic <- tryCatch({
+  perform_cv(cubic_model, Auto, 5)
+}, error = function(e) {
+  message("Error in 5-fold cross-validation for cubic model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+cv_10fold_linear <- tryCatch({
+  perform_cv(linear_model, Auto, 10)
+}, error = function(e) {
+  message("Error in 10-fold cross-validation for linear model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+cv_10fold_quadratic <- tryCatch({
+  perform_cv(quadratic_model, Auto, 10)
+}, error = function(e) {
+  message("Error in 10-fold cross-validation for quadratic model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+cv_10fold_cubic <- tryCatch({
+  perform_cv(cubic_model, Auto, 10)
+}, error = function(e) {
+  message("Error in 10-fold cross-validation for cubic model: ", e$message)
+  return(c(CV_MSE = NA, CV_RMSE = NA))
+})
+
+print("Model: Linear")
+print(paste("LOO MSE:", cv_loo_linear[1], "LOO RMSE:", cv_loo_linear[2]))
+print(paste("5-Fold CV MSE:", cv_5fold_linear[1], "5-Fold CV RMSE:", cv_5fold_linear[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_linear[1], "10-Fold CV RMSE:", cv_10fold_linear[2]))
+print("")
+
+print("Model: Quadratic")
+print(paste("LOO MSE:", cv_loo_quadratic[1], "LOO RMSE:", cv_loo_quadratic[2]))
+print(paste("5-Fold CV MSE:", cv_5fold_quadratic[1], "5-Fold CV RMSE:", cv_5fold_quadratic[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_quadratic[1], "10-Fold CV RMSE:", cv_10fold_quadratic[2]))
+print("")
+
+print("Model: Cubic")
+print(paste("LOO MSE:", cv_loo_cubic[1], "LOO RMSE:", cv_loo_cubic[2]))
+print(paste("5-Fold CV MSE:", cv_5fold_cubic[1], "5-Fold CV RMSE:", cv_5fold_cubic[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_cubic[1], "10-Fold CV RMSE:", cv_10fold_cubic[2]))
+```
+The results from the cross-validation using the cv.glm function indicate clear trends in the predictive accuracy of the three models—linear, quadratic, and cubic—when estimating mpg from horsepower in the Auto dataset. For Leave-One-Out Cross-Validation (LOOCV), all three models report an identical Root Mean Squared Error (RMSE) of 392, which appears erroneous and likely results from a computational issue during the LOOCV process. However, for both 5-fold and 10-fold Cross-Validation, the quadratic and cubic models demonstrate slightly better predictive performance compared to the linear model, as evidenced by lower Mean Squared Error (MSE) and RMSE values. Among the quadratic and cubic models, their performance is nearly identical, suggesting minimal improvement in moving from quadratic to cubic complexity. Specifically, the quadratic model achieves the lowest RMSE values for both 5-fold (4.38) and 10-fold (4.38) validations, indicating it provides the best trade-off between simplicity and accuracy. Overall, while LOOCV results are inconclusive, the quadratic model appears to be the most robust choice based on 5-fold and 10-fold CV.
+
+\pagebreak
+
+# Task 2
+
+This task involves analyzing the relationship between the number of unemployed persons (unemploy) and the median duration of unemployment (uempmed) from the economics dataset in the ggplot2 package. It requires fitting a linear model, an appropriate exponential or logarithmic model (depending on variable roles), and polynomial models of varying degrees (2nd, 3rd, and 10th). Using cv.glm from the boot package, we compare these models through Leave-One-Out Cross Validation (LOOCV) and 5-fold and 10-fold Cross Validation based on Root Mean Squared Error (RMSE) and Mean Squared Error (MSE). By visualizing the models and analyzing the cross-validation results, we explore concepts like underfitting, overfitting, and the application of cross-validation in selecting the best model.
+
+### 2.1 Fit the following models to explain the number of unemployed persons 'unemploy' by the median number of days unemployed 'uempmed' and vice versa: linear model, an appropriate exponential or logarithmic model (which one is appropriate depends on which is the dependent or independent variable), polynomial model of 2nd, 3rd and 10th degree.
+
+In this task, we analyze the relationship between the number of unemployed persons (unemploy) and the median duration of unemployment (uempmed) using the economics dataset from the ggplot2 package. We fit a linear model to capture a straightforward relationship, an appropriate exponential or logarithmic model based on the roles of the dependent and independent variables to explore non-linear trends, and polynomial models of 2nd, 3rd, and 10th degree to capture increasingly complex relationships. This modeling approach helps evaluate how well different types of relationships explain the data.
+
+``` {r}
+data("economics")
+
+linear_model <- glm(unemploy ~ uempmed, data = economics)
+
+log_model <- glm(log(unemploy) ~ uempmed, data = economics)
+
+poly2_model <- glm(unemploy ~ poly(uempmed, 2), data = economics)
+poly3_model <- glm(unemploy ~ poly(uempmed, 3), data = economics)
+poly10_model <- glm(unemploy ~ poly(uempmed, 10), data = economics)
+```
+
+The above code fits the models to the data.
+
+\pagebreak
+
+### 2.2 Plot the corresponding data and add all the models for comparison.
+
+In this task, we visualize the relationship between the number of unemployed persons (unemploy) and the median duration of unemployment (uempmed) from the economics dataset in the ggplot2 package. After fitting a linear model, an appropriate exponential or logarithmic model, and polynomial models of 2nd, 3rd, and 10th degrees, we plot the data and overlay the predictions from each model. This allows for a clear comparison of how each model captures the underlying patterns in the data, helping us assess the best fit for explaining the relationship between the variables.
+
+``` {r}
+plot(economics$uempmed, economics$unemploy, main = "Unemployed vs Median Days Unemployed", xlab = "Median Days Unemployed", ylab = "Number of Unemployed", pch = 16)
+lines(economics$uempmed, predict(linear_model), col = "blue", lwd = 2)
+lines(economics$uempmed, predict(log_model), col = "red", lwd = 2)
+lines(economics$uempmed, predict(poly2_model), col = "green", lwd = 2)
+lines(economics$uempmed, predict(poly3_model), col = "purple", lwd = 2)
+lines(economics$uempmed, predict(poly10_model), col = "orange", lwd = 2)
+
+legend("topright", legend = c("Linear", "Logarithmic", "Poly2", "Poly3", "Poly10"), col = c("blue", "red", "green", "purple", "orange"), lwd = 2)
+```
+The plot shows that all models fit relatively well on lower medians.
+
+\pagebreak
+
+### 2.4 Use the cv.glm function in the boot package for the following steps. Compare the Root Mean Squared Error and Mean Squared Error. Use cv.glm for Leave-one-out Cross Validation to compare the models above. Use cv.glm for 5-fold and 10-fold Cross Validation to compare the models above.
+
+In this task, we use the cv.glm function from the boot package to evaluate and compare the performance of the linear, exponential/logarithmic, and polynomial models (2nd, 3rd, and 10th degree) fitted to the relationship between the number of unemployed persons (unemploy) and the median duration of unemployment (uempmed) in the economics dataset. By applying Leave-One-Out Cross Validation (LOOCV), 5-fold Cross Validation, and 10-fold Cross Validation, we assess each model's predictive accuracy using performance metrics such as Root Mean Squared Error (RMSE) and Mean Squared Error (MSE). These cross-validation techniques help identify the model that best generalizes to new data, balancing complexity and performance.
+
+``` {r}
+perform_cv_economics <- function(model, data, folds) {
+  cv_result <- cv.glm(data, model, K = folds)
+  return(c(CV_MSE = cv_result$delta[1], CV_RMSE = sqrt(cv_result$delta[1])))
+}
+
+cv_loo_linear <- cv.glm(economics, linear_model)
+cv_loo_log <- cv.glm(economics, log_model)
+cv_loo_poly2 <- cv.glm(economics, poly2_model)
+cv_loo_poly3 <- cv.glm(economics, poly3_model)
+cv_loo_poly10 <- cv.glm(economics, poly10_model)
+
+cv_5fold_linear <- perform_cv_economics(linear_model, economics, 5)
+cv_5fold_log <- perform_cv_economics(log_model, economics, 5)
+cv_5fold_poly2 <- perform_cv_economics(poly2_model, economics, 5)
+cv_5fold_poly3 <- perform_cv_economics(poly3_model, economics, 5)
+cv_5fold_poly10 <- perform_cv_economics(poly10_model, economics, 5)
+
+cv_10fold_linear <- perform_cv_economics(linear_model, economics, 10)
+cv_10fold_log <- perform_cv_economics(log_model, economics, 10)
+cv_10fold_poly2 <- perform_cv_economics(poly2_model, economics, 10)
+cv_10fold_poly3 <- perform_cv_economics(poly3_model, economics, 10)
+cv_10fold_poly10 <- perform_cv_economics(poly10_model, economics, 10)
+
+
+print("Model: Linear")
+print(paste("LOO MSE:", cv_loo_linear$delta[1], "LOO RMSE:", sqrt(cv_loo_linear$delta[1])))
+print(paste("5-Fold CV MSE:", cv_5fold_linear[1], "5-Fold CV RMSE:", cv_5fold_linear[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_linear[1], "10-Fold CV RMSE:", cv_10fold_linear[2]))
+print("") 
+
+print("Model: Logarithmic")
+print(paste("LOO MSE:", cv_loo_log$delta[1], "LOO RMSE:", sqrt(cv_loo_log$delta[1])))
+print(paste("5-Fold CV MSE:", cv_5fold_log[1], "5-Fold CV RMSE:", cv_5fold_log[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_log[1], "10-Fold CV RMSE:", cv_10fold_log[2]))
+print("")
+print("Model: Poly2")
+print(paste("LOO MSE:", cv_loo_poly2$delta[1], "LOO RMSE:", sqrt(cv_loo_poly2$delta[1])))
+print(paste("5-Fold CV MSE:", cv_5fold_poly2[1], "5-Fold CV RMSE:", cv_5fold_poly2[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_poly2[1], "10-Fold CV RMSE:", cv_10fold_poly2[2]))
+print("")
+
+print("Model: Poly3")
+print(paste("LOO MSE:", cv_loo_poly3$delta[1], "LOO RMSE:", sqrt(cv_loo_poly3$delta[1])))
+print(paste("5-Fold CV MSE:", cv_5fold_poly3[1], "5-Fold CV RMSE:", cv_5fold_poly3[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_poly3[1], "10-Fold CV RMSE:", cv_10fold_poly3[2]))
+print("")
+
+print("Model: Poly10")
+print(paste("LOO MSE:", cv_loo_poly10$delta[1], "LOO RMSE:", sqrt(cv_loo_poly10$delta[1])))
+print(paste("5-Fold CV MSE:", cv_5fold_poly10[1], "5-Fold CV RMSE:", cv_5fold_poly10[2]))
+print(paste("10-Fold CV MSE:", cv_10fold_poly10[1], "10-Fold CV RMSE:", cv_10fold_poly10[2]))
+
+```
+
+The cross-validation results indicate that the logarithmic model is the most effective for predicting the relationship between unemployment duration (uempmed) and the number of unemployed (unemploy). It achieves the lowest Mean Squared Error (MSE) and Root Mean Squared Error (RMSE) across all validation methods, with an LOOCV RMSE of 0.2305, outperforming all other models. Polynomial models, particularly higher-degree ones like the 10th degree, exhibit substantially higher RMSE and MSE, suggesting overfitting and poor generalization. Lower-degree polynomials (2nd and 3rd degree) perform better but still lag behind the logarithmic model. The linear model also demonstrates weaker performance, with high MSE and RMSE values, reflecting its inability to capture the complexity of the relationship. Overall, the logarithmic model provides the best balance of simplicity and predictive accuracy.

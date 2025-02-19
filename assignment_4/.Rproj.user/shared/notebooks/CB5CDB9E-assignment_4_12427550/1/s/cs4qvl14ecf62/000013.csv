@@ -1,0 +1,6 @@
+"0","tryCatch({"
+"0","  hist(bootstrap_means, breaks = 30, main = ""Distribution of Bootstrap Means"", xlab = ""Means"", col = ""skyblue"")"
+"0","  abline(v = mean_original, col = ""red"", lwd = 2)"
+"0","}, error = function(e) {"
+"0","  message(""Error in plotting the histogram: "", e$message)"
+"0","})"

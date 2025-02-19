@@ -1,0 +1,2 @@
+"0","# Histogramm der Bootstrap-Mediane mit Overlay des Originalmedians"
+"0","hist(bootstrap_medians, breaks = 30, main = ""Verteilung der Bootstrap-Mediane"", xlab = ""Mediane"", col = ""lightgreen"")"

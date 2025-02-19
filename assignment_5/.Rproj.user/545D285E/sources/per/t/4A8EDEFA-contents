@@ -1,0 +1,399 @@
+---
+title: "Assignment 5"
+author: "Gabor Zeke"
+date: "2024-11-25"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn = -1)
+```
+
+# Introduction
+
+This assignment focuses on exploring various statistical methods, including hypothesis testing, confidence interval estimation, and model fitting using resampling techniques such as bootstrap and permutation tests. The primary aim is to apply these methods to both parametric and non-parametric scenarios to deepen our understanding of their practical applications in statistical analysis.
+
+In the first task, we address a two-sample hypothesis problem where we test the null hypothesis. The two given samples will be analyzed using various statistical techniques, including the t-test and Wilcoxon rank-sum test. Additionally, we will implement bootstrap methods to estimate the significance of the differences in means between the two samples. This task will also involve comparing different sampling strategies, such as resampling with and without centering, to evaluate their effect on the analysis, and comparing these results to the outcomes from traditional hypothesis testing methods available in R.
+
+In the second task, we simulate a linear regression model with multiple predictors, examining the impact of a predictor, x3, on the dependent variable y. Using a sample of size 200, we will apply both residual bootstrap and pairs bootstrap methods to estimate confidence intervals for the regression coefficients. A key focus will be to assess whether x3 can be excluded from the model, and we will compare the results of the two bootstrap approaches to understand how they affect model inference.
+
+The final task involves summarizing the methodology of bootstrapping, its advantages, and its limitations based on the results from the previous exercises. We will discuss how bootstrapping can be used for constructing parametric and non-parametric confidence intervals, test statistics, and model estimates, providing a comprehensive view of its practical applications in statistical analysis. Ultimately, this assignment aims to deepen our understanding of how resampling techniques can enhance statistical inference, offering flexibility and robustness in cases where traditional assumptions may not hold.
+
+\pagebreak
+
+# Task 1 - Testing Bootstrap Sampling
+
+In this task, we aim to assess whether there is a significant difference between the means of two independent samples. We aim to test the following hypotheses:
+
+- Null Hypothesis (\(H_0\)): \(\mu_1 = \mu_2\)
+- Alternative Hypothesis (\(H_1\)): \(\mu_1 \neq \mu_2\) 
+
+Using statistical techniques such as bootstrap sampling, permutation testing, and traditional methods like the t-test and Wilcoxon rank-sum test, we will evaluate the evidence for rejecting H0. These methods allow us to make conclusions based on the underlying data distribution and provide insight into the robustness of our findings. The two samples are provided as numeric vectors, x1 and x2, representing observations from two groups.
+
+``` {r data}
+x1 <- c(-0.673, -0.584, 0.572, -0.341, -0.218, 0.603, -0.415, -0.013, 0.763, 0.804, 0.054, 
+        1.746, -0.472, 1.638, -0.578, 0.947, -0.329, -0.188, 0.794, 0.894, -1.227, 1.059)
+x2 <- c(0.913, -0.639, 2.99, -5.004, 3.118, 0.1, 1.128, 0.579, 0.32, -0.488, -0.994, 
+        -0.212, 0.413, 1.401, 0.007, 0.568, -0.005, 0.696)
+```
+
+### 1.1 Plot the data in a way which visualises the comparison of means appropriately.
+
+In this step, we aim to visualize the two samples, x1 and x2, to compare their distributions and assess potential differences in their means. Effective visualization helps identify patterns, outliers, and the overall spread of the data, providing a clear foundation for subsequent statistical testing. We will use side-by-side boxplots and overlaid histograms to represent the data, as these methods allow for a straightforward comparison of central tendencies (means or medians) and variability within each sample.
+
+``` {r 1.1}
+boxplot(x1, x2, names = c("Sample 1", "Sample 2"), main = "Comparison of Samples",
+        ylab = "Values", col = c("skyblue", "lightgreen"))
+
+hist(x1, col = rgb(1, 0, 0, 0.5), breaks = 10, xlim = range(c(x1, x2)), xlab = "Values",
+     main = "Histogram Comparison", probability = TRUE)
+hist(x2, col = rgb(0, 0, 1, 0.5), breaks = 10, add = TRUE, probability = TRUE)
+legend("topright", legend = c("Sample 1", "Sample 2"), fill = c(rgb(1, 0, 0, 0.5), rgb(0, 0, 1, 0.5)))
+```
+The combination of the boxplot and overlaid histograms provides a comprehensive view of the data, allowing you to compare the central tendency (median), spread (IQR and range), shape, and potential outliers between the two samples (x1 and x2). It can be observed that Sample 2 has higher a median and overall higher values, however two higher frequencies can be observed in Sample 2 at -1 and 2.
+
+\pagebreak
+
+### 1.2 Consider different sampling schemes, such as: sampling with replacement from each group and centering both samples and then resample from the combined samples x1 and x2, for n1 and n2 times. Argue for choice what is more natural and which advantages or disadvantages may apply.
+
+In this task, we explore different sampling schemes to assess differences between two independent samples, x1 and x2. The two primary methods considered are: (1) sampling with replacement independently within each group, and (2) centering the combined data, then resampling for n1 and n2 observations. Each approach has its own advantages and limitations. Independent sampling preserves the group structure, reflecting individual group variability, while pooled sampling focuses on directly testing the null hypothesis by assuming a symmetric distribution under H0. We will compare these schemes to determine which is more natural or appropriate in the given context.
+
+``` {r 1.2}
+bootstrap_independent <- function(x1, x2, B = 1000) {
+  n1 <- length(x1)
+  n2 <- length(x2)
+  resampled_means <- replicate(B, {
+    mean1 <- mean(sample(x1, size = n1, replace = TRUE))
+    mean2 <- mean(sample(x2, size = n2, replace = TRUE))
+    mean1 - mean2
+  })
+  resampled_means
+}
+
+set.seed(12427550)
+independent_bootstrap <- bootstrap_independent(x1, x2)
+summary(independent_bootstrap)
+
+bootstrap_pooled <- function(x1, x2, B = 1000) {
+  combined <- c(x1, x2)
+  centered <- combined - mean(combined)
+  n1 <- length(x1)
+  n2 <- length(x2)
+  resampled_means <- replicate(B, {
+    resample1 <- sample(centered, size = n1, replace = TRUE)
+    resample2 <- sample(centered, size = n2, replace = TRUE)
+    mean(resample1) - mean(resample2)
+  })
+  resampled_means
+}
+
+set.seed(12427550)
+pooled_bootstrap <- bootstrap_pooled(x1, x2)
+summary(pooled_bootstrap)
+
+```
+
+The results from the independent bootstrap indicate that the difference in means between x1 and x2 varies within a range from a minimum of -1.11344 to a maximum of 1.38100. The negative minimum value suggests that in some bootstrap resamples, the mean of x2 was much larger than that of x1, whereas the positive maximum indicates that, in other resamples, x1 had a much larger mean than x2. The median of -0.07774 and the mean of -0.06464 suggest that the average difference in means is slightly negative, implying that x2 is generally larger than x1 in terms of the mean. The interquartile range (from -0.34803 to 0.20292) shows a moderate spread of the differences, indicating that while the two samples have differences in means, they are not excessively large. This summary provides an overview of the potential distribution of the difference in means between the two samples based on the independent resampling process.
+
+In contrast, the pooled bootstrap resamples from a combined dataset, assuming the two samples come from the same population. This method's results have a similar range, with a minimum of -1.254975 and a maximum of 1.220136. The mean (-0.003231) and median (0.002351) are close to zero, indicating that under the pooled bootstrap approach, the difference in means is almost balanced, suggesting no strong evidence that one sample is consistently larger than the other. The interquartile range is also similar, implying comparable variability in both resampling methods.
+
+\pagebreak
+
+### 1.3 Bootstrap using both strategies mentioned above using the t-test statistic. Calculate the bootstrap p-value based on 10000 bootstrap samples and 0.95 as well as 0.99 confidence intervals. Make your decision at the significance level 0.05 or 0.01, respectively.
+
+In this task, we utilize bootstrap resampling to test a hypothesis where:
+
+The null hypothesis is:
+
+\[
+H_0: \mu_1 = \mu_2
+\]
+
+The alternative hypothesis is:
+
+\[
+H_1: \mu_1 \neq \mu_2
+\]
+
+Two bootstrap strategies are employed: 
+(1) sampling with replacement independently from each group, and 
+(2) centering the combined data before resampling. 
+
+By generating 10,000 bootstrap samples, we calculate the bootstrap p-value and construct 95% and 99% confidence intervals for the difference in means. These results help us determine whether to reject the null hypothesis at the significance levels of 0.05 and 0.01, providing insights into the statistical significance of the observed difference.
+
+``` {r 1.3}
+bootstrap_test <- function(x1, x2, B = 10000, alpha = 0.05, method = "independent") {
+  if (!is.numeric(x1) || !is.numeric(x2)) stop("Both x1 and x2 must be numeric vectors.")
+  if (B <= 0 || !is.numeric(B)) stop("Number of bootstrap samples (B) must be a positive integer.")
+  
+  n1 <- length(x1)
+  n2 <- length(x2)
+  observed_stat <- tryCatch(t.test(x1, x2)$statistic,
+                            error = function(e) stop("Error in calculating observed t-statistic:", e))
+  
+  bootstrap_stats <- numeric(B)
+  
+  if (method == "independent") {
+    for (i in 1:B) {
+      sample_x1 <- sample(x1, size = n1, replace = TRUE)
+      sample_x2 <- sample(x2, size = n2, replace = TRUE)
+      bootstrap_stats[i] <- tryCatch(t.test(sample_x1, sample_x2)$statistic, 
+                                     error = function(e) NA)
+    }
+  } else if (method == "pooled") {
+    combined <- c(x1, x2)
+    centered <- combined - mean(combined)
+    for (i in 1:B) {
+      resample_x1 <- sample(centered, size = n1, replace = TRUE)
+      resample_x2 <- sample(centered, size = n2, replace = TRUE)
+      bootstrap_stats[i] <- tryCatch(t.test(resample_x1, resample_x2)$statistic, 
+                                     error = function(e) NA)
+    }
+  } else {
+    stop("Invalid method. Use 'independent' or 'pooled'.")
+  }
+  
+  p_value <- mean(abs(bootstrap_stats) >= abs(observed_stat), na.rm = TRUE)
+  ci <- quantile(bootstrap_stats, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
+  
+  list(p_value = p_value, ci = ci, observed_stat = observed_stat)
+}
+
+independent_result <- bootstrap_test(x1, x2, method = "independent")
+pooled_result <- bootstrap_test(x1, x2, method = "pooled")
+
+independent_result
+pooled_result
+```
+
+The results from the bootstrap test for both the independent and pooled methods indicate that there is no significant difference between the means of x1 and x2. For both methods, the p-values are very high: 0.906 for the independent method and 0.9088 for the pooled method. These p-values are much larger than the common significance level of 0.05, suggesting that we fail to reject the null hypothesis of no difference between the means of the two samples. The observed t-statistic, which measures the difference between the sample means relative to the variability, is -0.1188053 for both methods, further indicating a negligible difference between the means. Additionally, the 95% confidence intervals for the difference in means are wide and include zero: for the independent method, the interval is from -2.502249 to 1.621847, and for the pooled method, the interval is from -1.978641 to 1.975821. This overlap with zero further suggests that the observed differences in means are not statistically significant. Overall, the bootstrap results support the conclusion that there is no evidence of a meaningful difference between the two samples based on either the independent or pooled approach.
+
+\pagebreak
+
+### 1.4 What would be a permutation version of the test? Implement the corresponding permutation test and obtain p-value and confidence intervals as in 3. to get a corresponding test decision at the same significance levels.
+
+In this task, we implement a permutation test to evaluate the hypothesis 
+
+\[
+H_0: \mu_1 = \mu_2
+\]
+
+\[
+H_1: \mu_1 \neq \mu_2
+\]
+
+A permutation test involves repeatedly shuffling the combined data between the two groups while preserving the group sizes, recalculating the test statistic (e.g., the difference in means) for each shuffle. This approach constructs a null distribution for the test statistic based on the assumption that the group labels are exchangeable under H0. By comparing the observed statistic to this null distribution, we calculate a p-value and derive confidence intervals, enabling us to make a decision at significance levels of 0.05 and 0.01. This non-parametric method is especially valuable for its flexibility and minimal reliance on distributional assumptions.
+
+``` {r 1.4}
+permutation_test <- function(x1, x2, B = 10000, alpha = 0.05) {
+  if (!is.numeric(x1) || !is.numeric(x2)) stop("Both x1 and x2 must be numeric vectors.")
+  if (B <= 0 || !is.numeric(B)) stop("Number of permutations (B) must be a positive integer.")
+  
+  combined <- c(x1, x2)
+  n1 <- length(x1)
+  observed_stat <- tryCatch(t.test(x1, x2)$statistic,
+                            error = function(e) stop("Error in calculating observed t-statistic:", e))
+  
+  perm_stats <- numeric(B)
+  for (i in 1:B) {
+    permuted <- sample(combined)
+    perm_x1 <- permuted[1:n1]
+    perm_x2 <- permuted[(n1 + 1):length(permuted)]
+    perm_stats[i] <- tryCatch(t.test(perm_x1, perm_x2)$statistic, error = function(e) NA)
+  }
+  
+  p_value <- mean(abs(perm_stats) >= abs(observed_stat), na.rm = TRUE)
+  ci <- quantile(perm_stats, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
+  
+  list(p_value = p_value, ci = ci, observed_stat = observed_stat)
+}
+
+permutation_result <- permutation_test(x1, x2)
+
+permutation_result
+```
+
+The results from the permutation test confirm the findings from the previous tests (bootstrap and t-test), indicating no significant difference between the means of x1 and x2.
+
+The p-value from the permutation test is 0.9099, which is far greater than the typical significance level of 0.05. This suggests that we fail to reject the null hypothesis, meaning there is no significant difference between the means of the two samples. The observed t-statistic is -0.1188053, which again indicates a very small difference between the sample means, further supporting the conclusion of no significant effect.
+
+The 95% confidence interval for the permutation test is from -1.979562 to 1.907942. Since this interval includes zero, it reinforces the idea that the true difference in means could very well be zero, further suggesting no meaningful difference between x1 and x2.
+
+In summary, the permutation test results, which involve resampling without any assumptions about the underlying distribution, provide further evidence that the observed difference between the two samples is not statistically significant. All methods (independent bootstrap, pooled bootstrap, and permutation test) consistently point to the conclusion that there is no significant difference between the means of x1 and x2.
+
+\pagebreak
+
+### 1.5 The Wilxocon rank sum test statistic is the sum of ranks of the observations of sample 1 computed in the combined sample. Use bootstrapping with both strategies mentioned above and obtain p-value and confidence intervals as in 3. to get a corresponding test decision at the same significance levels.
+
+In this task, we apply the Wilcoxon rank-sum test, a non-parametric method that compares the distributions of two independent samples, x1 and x2. The test statistic is calculated as the sum of ranks of the observations in x1 when both samples are combined. To evaluate the significance of this statistic, we use bootstrapping under two strategies: (1) sampling with replacement independently from each group, and (2) centering and resampling from the combined data. These approaches generate a bootstrap distribution of the test statistic, allowing us to compute a p-value and construct confidence intervals. We then make decisions at significance levels of 0.05 and 0.01, assessing whether the observed differences are statistically meaningful.
+
+``` {r 1.5}
+suppressWarnings({
+    wilcoxon_test <- function(x1, x2, B = 10000, alpha = 0.05, method = "independent") {
+    if (!is.numeric(x1) || !is.numeric(x2)) stop("Both x1 and x2 must be numeric vectors.")
+    if (B <= 0 || !is.numeric(B)) stop("Number of bootstrap samples (B) must be a positive integer.")
+    
+    n1 <- length(x1)
+    observed_stat <- tryCatch(wilcox.test(x1, x2)$statistic, 
+                              error = function(e) stop("Error in calculating observed Wilcoxon statistic:", e))
+    
+    bootstrap_stats <- numeric(B)
+    
+    if (method == "independent") {
+      for (i in 1:B) {
+        sample_x1 <- sample(x1, size = n1, replace = TRUE)
+        sample_x2 <- sample(x2, size = length(x2), replace = TRUE)
+        bootstrap_stats[i] <- tryCatch(wilcox.test(sample_x1, sample_x2)$statistic, 
+                                       error = function(e) NA)
+      }
+    } else if (method == "pooled") {
+      combined <- c(x1, x2)
+      centered <- combined - mean(combined)
+      for (i in 1:B) {
+        resample_x1 <- sample(centered, size = n1, replace = TRUE)
+        resample_x2 <- sample(centered, size = length(x2), replace = TRUE)
+        bootstrap_stats[i] <- tryCatch(wilcox.test(resample_x1, resample_x2)$statistic, 
+                                       error = function(e) NA)
+      }
+    } else {
+      stop("Invalid method. Use 'independent' or 'pooled'.")
+    }
+    
+    p_value <- mean(bootstrap_stats >= observed_stat, na.rm = TRUE)
+    ci <- quantile(bootstrap_stats, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
+    
+    list(p_value = p_value, ci = ci, observed_stat = observed_stat)
+  }
+  
+  wilcoxon_independent <- wilcoxon_test(x1, x2, method = "independent")
+  wilcoxon_pooled <- wilcoxon_test(x1, x2, method = "pooled")
+  
+  wilcoxon_independent
+  wilcoxon_pooled
+})
+```
+The results from the Wilcoxon test for both the independent and pooled methods suggest that there is no significant difference between the two samples, x1 and x2. The p-value from the independent method is 0.6762, which is much greater than the commonly used significance level of 0.05, indicating that we fail to reject the null hypothesis. This suggests that the distributions of x1 and x2 are likely the same. The observed Wilcoxon statistic is 181, and it lies within the 95% confidence interval for the bootstrap resampled test statistics, which ranges from 127 to 270. Since the observed statistic is not extreme compared to the resampled values, this further reinforces the conclusion that there is no substantial difference between the two samples. Thus, the Wilcoxon test, both in its standard and bootstrap resampled forms, indicates that the differences between x1 and x2 are not statistically significant.
+
+\pagebreak
+
+### 1.6 Compare your results to the results using the R functions t.test and wilcox.test.
+
+In this task, we compare the results obtained from our bootstrap and permutation analyses to the outcomes of the standard t-test and Wilcoxon rank-sum test implemented in R (t.test and wilcox.test). These built-in functions provide quick and reliable methods for hypothesis testing. By comparing p-values and confidence intervals, we assess the agreement between the bootstrap, permutation, and traditional parametric and non-parametric approaches. This comparison highlights the advantages, limitations, and robustness of each method in analyzing the given data.
+
+``` {r 1.6}
+t_test_result <- t.test(x1, x2)
+wilcox_test_result <- wilcox.test(x1, x2)
+
+list(
+  t_test = t_test_result,
+  wilcox_test = wilcox_test_result,
+  bootstrap_independent = independent_result,
+  bootstrap_pooled = pooled_result,
+  permutation = permutation_result,
+  wilcoxon_independent = wilcoxon_independent,
+  wilcoxon_pooled = wilcoxon_pooled
+)
+```
+
+The results from the various statistical tests applied to compare the two samples, x1 and x2, consistently indicate no significant difference between the groups. The t-test produces a p-value of 0.9065, far above the typical significance level of 0.05, suggesting that we fail to reject the null hypothesis of equal means. The 95% confidence interval for the difference in means spans from -0.9556081 to 0.8518000, which includes zero, further supporting the lack of a significant difference. Similarly, the Wilcoxon rank-sum test yields a p-value of 0.6572, also above 0.05, reinforcing the conclusion that the location shifts (medians) of the two distributions are not significantly different. Additionally, the results from both the bootstrap independent and pooled methods (with p-values of 0.906 and 0.9088, respectively), along with the permutation test (p-value 0.9099), all show no evidence of a significant difference between the two samples. The Wilcoxon bootstrap results also align with this, with a p-value of 0.4977. Overall, all tests converge on the same conclusion: there is no statistically significant difference between the means or distributions of x1 and x2.
+
+\pagebreak
+
+# Task 2 - Residual and pairs bootstrap
+
+In this task, we explore the use of bootstrap methods to assess the stability and significance of regression coefficients in a linear regression model. Specifically, we generate a synthetic dataset based on a predefined model, where the response variable y depends on predictors x1, x2, and an independent predictor x3, along with random noise. Two types of bootstrap methods—residual bootstrap and pairs bootstrap—are employed to calculate percentile confidence intervals for the regression coefficients. The primary objective is to determine whether the independent predictor x3 can be excluded based on the resulting confidence intervals. Furthermore, we compare the two bootstrap approaches, discussing their differences in sampling strategies and their potential effects on the results. This comparison sheds light on the implications of the chosen bootstrap method in linear regression analysis.
+
+### 2.1 Create a sample of size 200 from the model above and for the independent predictor x3.
+
+This task involves generating a synthetic dataset based on a specified regression model. The model describes a response variable y as a function of two predictors, x1 and x2, with an added noise term epsilon. The predictor x1 is drawn from a normal distribution, x2 is sampled from a uniform distribution, and epsilon follows a Student's t-distribution with 5 degrees of freedom. Additionally, an independent predictor x3 is sampled uniformly over a given range. Using this model, we create a dataset of size 200 to be used for further analysis. This dataset serves as the foundation for exploring the impact of x3 on the response variable y.
+
+``` {r 2.1}
+n <- 200
+x1 <- rnorm(n, mean = 2, sd = sqrt(3))
+x2 <- runif(n, min = 2, max = 4)
+x3 <- runif(n, min = -2, max = 2)
+epsilon <- rt(n, df = 5)
+y <- 3 + 2 * x1 + x2 + epsilon
+data <- data.frame(x1, x2, x3, y)
+```
+
+\pagebreak
+
+### 2.2 Do residual bootstrap for linear regression and fit the model y∼x1+x2+x3. Get the percentile CI for the coefficients. Can you exclude x3?
+
+This task involves applying the residual bootstrap method to assess the significance of predictors in a linear regression model where y is modeled as a function of x1, x2, and x3. Using the bootstrap approach, we resample the residuals from the fitted model to generate new datasets and refit the regression model on each resampled dataset. The goal is to compute percentile confidence intervals for the regression coefficients and determine whether the predictor x3 can be excluded based on these intervals.
+
+``` {r 2.2}
+residual_bootstrap <- function(data, n_boot = 1000) {
+  tryCatch({
+    model <- lm(y ~ x1 + x2 + x3, data = data)
+    residuals <- model$residuals
+    fitted_values <- model$fitted.values
+    coef_boot <- replicate(n_boot, {
+      resampled_residuals <- sample(residuals, replace = TRUE)
+      y_boot <- fitted_values + resampled_residuals
+      coef(lm(y_boot ~ x1 + x2 + x3, data = data))
+    })
+    apply(coef_boot, 1, function(coef) quantile(coef, probs = c(0.025, 0.975)))
+  }, error = function(e) stop("Error in residual bootstrap: ", e$message))
+}
+
+residual_ci <- residual_bootstrap(data)
+```
+
+### 2.3 Do pairs bootstrap for linear regression and fit the model y∼x1+x2+x3. Get the percentile CI for the coefficients. Can you exclude x3?
+
+This task involves using the pairs bootstrap method to evaluate the significance of predictors in a linear regression model where y is modeled as a function of x1, x2, and x3. In this approach, we resample entire rows of the dataset (both predictors and response) to create bootstrap samples. The regression model is then refitted on each sample, and percentile confidence intervals for the coefficients are calculated. The objective is to determine whether the predictor x3 can be excluded based on these intervals.
+
+``` {r 2.3}
+pairs_bootstrap <- function(data, n_boot = 1000) {
+  tryCatch({
+    coef_boot <- replicate(n_boot, {
+      boot_data <- data[sample(nrow(data), replace = TRUE), ]
+      coef(lm(y ~ x1 + x2 + x3, data = boot_data))
+    })
+    apply(coef_boot, 1, function(coef) quantile(coef, probs = c(0.025, 0.975)))
+  }, error = function(e) stop("Error in pairs bootstrap: ", e$message))
+}
+
+pairs_ci <- pairs_bootstrap(data)
+
+list(residual_ci = residual_ci, pairs_ci = pairs_ci)
+```
+
+The results from the residual bootstrap and pairs bootstrap methods provide 95% confidence intervals for the regression coefficients of the model y∼x1+x2+x3. Both methods yield similar confidence intervals for most coefficients, with overlap observed for the intercept, x1, and x2. For the residual bootstrap, the 95% confidence intervals are: Intercept: [1.418, 3.363], x1: [1.940, 2.127], x2: [0.832, 1.435], and x3: [-0.106, 0.217]. For the pairs bootstrap, the intervals are: Intercept: [1.221, 3.390], x1: [1.935, 2.131], x2: [0.837, 1.458], and x3: [-0.111, 0.220]. While the intervals for the intercept, x1, and x2 are quite similar, the confidence intervals for x3 show slight differences, with the residual bootstrap method giving a narrower interval that includes zero, suggesting that x3 may not be significantly different from zero, depending on the context. Overall, these results offer consistent estimates for the regression coefficients, but the slight variation in the interval for x3 indicates some sensitivity to the chosen resampling method.
+
+\pagebreak
+
+### 2.4 Compare the two approaches in 2. and 3. and explain the differences in the sampling approach and how this (might) affect(s) the results.
+
+This task involves comparing the residual bootstrap and pairs bootstrap methods for constructing confidence intervals in a linear regression model. The residual bootstrap resamples the residuals of the model while keeping the predictors fixed, assuming the model is correctly specified. The pairs bootstrap resamples entire rows of the data, accounting for variability in both predictors and response. By comparing the confidence intervals for the regression coefficients produced by these methods, we aim to understand how the differences in sampling approaches influence the results, particularly in assessing the significance of predictors like x3.
+
+``` {r 2.4}
+residual_x3_ci <- residual_ci[", x3"]
+pairs_x3_ci <- pairs_ci[ ,"x3"]
+
+print("Confidence Interval for x3 (Residual Bootstrap):")
+print(residual_x3_ci)
+
+print("Confidence Interval for x3 (Pairs Bootstrap):")
+print(pairs_x3_ci)
+
+exclude_x3_residual <- all(residual_x3_ci > 0) || all(residual_x3_ci < 0)
+exclude_x3_pairs <- all(pairs_x3_ci > 0) || all(pairs_x3_ci < 0)
+```
+
+\pagebreak
+
+# Task 3 - Advantages and disadvantages of bootstrapping methodology
+
+Bootstrapping is a powerful statistical technique used for constructing parametric and non-parametric confidence intervals and test statistics, enabling robust estimation of model parameters, estimators, or test statistics. It involves resampling from the observed data (with or without replacement) to generate multiple "bootstrap samples," which are then used to compute the desired statistic or test. This approach can be applied to both parametric (e.g., t-tests, regression) and non-parametric (e.g., rank-sum tests) settings.
+
+Advantages of bootstrapping include its flexibility, as it requires fewer assumptions about the underlying distribution, making it applicable to a wide variety of problems, especially when the data distribution is unknown or complex. It also allows for the computation of confidence intervals, p-values, and model validation measures without needing closed-form analytical solutions. Additionally, bootstrapping can be used with small sample sizes where traditional methods might fail to provide reliable results.
+
+Disadvantages, however, include its computational intensity, particularly when the number of bootstrap samples (B) is large, requiring significant processing power and time. Additionally, while bootstrapping can provide accurate estimates, it may still be susceptible to biases or incorrect conclusions if the data itself is not representative or if the bootstrap samples are not independent or identically distributed (i.i.d.). Lastly, while bootstrapping can generate accurate confidence intervals, it may not always perform well in cases where extreme data points (outliers) heavily influence the estimates.
+
+In tasks such as hypothesis testing or confidence interval construction, bootstrapping with different sampling schemes (like independent or pooled) or methods (like residual and pairs bootstrap) allows for greater insight into the robustness of model estimates or statistical conclusions, particularly when dealing with complex models or non-normal data distributions.
